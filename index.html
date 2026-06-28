@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>CCTV OPS — ระบบรับแจ้งซ่อมกล้องวงจรปิด</title>
+
+<script>
+  // กรองเฉพาะคำเตือน "cdn.tailwindcss.com should not be used in production"
+  // (เครื่องมือนี้เป็นไฟล์เดี่ยวใช้ภายใน การใช้ Play CDN ทำงานได้ปกติ)
+  (function(){ const w=console.warn; console.warn=function(){ try{ if(arguments[0]&&String(arguments[0]).indexOf('cdn.tailwindcss.com')>-1) return; }catch(e){} return w.apply(console,arguments); }; })();
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Kanit:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { display:['Orbitron','sans-serif'], thai:['Kanit','sans-serif'], mono:['Share Tech Mono','monospace'] },
+    colors: { neon:'#1fe0a0', neongreen:'#7bed3a', neonpink:'#ff2d95' },
+  }}};
+</script>
+
+<style>
+  :root, .dark {
+    --bg:#05070f; --text:#e6f7ff; --muted:rgba(160,200,220,.6);
+    --accent:#00f7ff; --accent2:#39ff14;
+    --glass-bg:rgba(10,18,32,.55); --glass-border:rgba(0,247,255,.18);
+    --glass-soft:rgba(10,18,32,.40); --soft-border:rgba(255,255,255,.07);
+    --field-bg:rgba(3,8,18,.7); --field-border:rgba(0,247,255,.18);
+    --grid:rgba(0,247,255,.06); --th:0 0 8px rgba(0,247,255,.7),0 0 20px rgba(0,247,255,.35);
+    --th2:0 0 8px rgba(57,255,20,.7),0 0 20px rgba(57,255,20,.35); --report-bg:#070b16;
+    --k-wait:#ff5a5a; --k-prog:#ffb02e; --k-done:#39ff14; --kshadow:0 0 12px currentColor;
+  }
+  .light {
+    --bg:#f3faf6; --text:#2d2926; --muted:rgba(108,118,112,.85);
+    --accent:#48a23f; --accent2:#00b2a9;
+    --glass-bg:rgba(255,255,255,.88); --glass-border:rgba(72,162,63,.18);
+    --glass-soft:rgba(255,255,255,.7); --soft-border:rgba(45,41,38,.10);
+    --field-bg:#ffffff; --field-border:rgba(72,162,63,.22);
+    --grid:rgba(72,162,63,.05); --th:none; --th2:none; --report-bg:#ffffff;
+    --k-wait:#ea7600; --k-prog:#f2a100; --k-done:#48a23f; --kshadow:none;
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  body { font-family:'Kanit',sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; transition:background .4s ease,color .4s ease; }
+  body.light { background:linear-gradient(180deg,#dcefe2 0%,#ecf6ef 18%,#f4faf6 48%,#fbfdfc 100%); background-attachment:fixed; }
+  body.light.cyber-bg::before { opacity:.4; }
+  body.dark { background:linear-gradient(180deg,#05070f 0%,#070b1640 40%,#05070f 100%),#05070f; background-attachment:fixed; }
+
+  .cyber-bg::before { content:""; position:fixed; inset:-50%; z-index:-2;
+    background:radial-gradient(circle at 20% 20%, color-mix(in srgb,var(--accent) 12%,transparent),transparent 40%),
+      radial-gradient(circle at 80% 70%, color-mix(in srgb,var(--accent2) 10%,transparent),transparent 45%);
+    animation:drift 18s ease-in-out infinite alternate; }
+  .cyber-bg::after { content:""; position:fixed; inset:0; z-index:-1;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:44px 44px; mask-image:radial-gradient(ellipse 80% 80% at 50% 40%,#000 40%,transparent 100%);
+    animation:gridmove 20s linear infinite; }
+  @keyframes gridmove{from{background-position:0 0}to{background-position:44px 44px}}
+  @keyframes drift{from{transform:translate(0,0) rotate(0deg)}to{transform:translate(3%,-3%) rotate(2deg)}}
+
+  .glass{background:var(--glass-bg);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);
+    border:1px solid var(--glass-border);box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)}
+  .accent{color:var(--accent);text-shadow:var(--th)} .accent2{color:var(--accent2);text-shadow:var(--th2)}
+  .brand-grad{ background:linear-gradient(100deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:none; }
+  .card-hover{ transition:transform .18s ease, box-shadow .18s ease; }
+  .card-hover:hover{ transform:translateY(-3px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
+
+  .field{background:var(--field-bg);border:1px solid var(--field-border);color:var(--text);transition:all .2s ease}
+  .field::placeholder{color:var(--muted)}
+  .field:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent),0 0 18px color-mix(in srgb,var(--accent) 30%,transparent)}
+  .field.invalid{border-color:#ff3b3b;box-shadow:0 0 0 2px rgba(255,59,59,.18)}
+  select.field option{background:var(--bg);color:var(--text)}
+
+  .btn-neon{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 20%,transparent),color-mix(in srgb,var(--accent2) 16%,transparent));
+    border:1px solid var(--accent);color:var(--text);box-shadow:0 0 14px color-mix(in srgb,var(--accent) 28%,transparent);transition:all .2s ease}
+  .btn-neon:hover{box-shadow:0 0 26px color-mix(in srgb,var(--accent) 55%,transparent);transform:translateY(-1px)}
+  .btn-neon:active{transform:translateY(0)}
+  .btn-ghost{border:1px solid var(--soft-border);color:var(--muted)}
+  .btn-ghost:hover{color:var(--text);border-color:var(--accent)}
+
+  .stsel{border:1px solid;border-radius:9999px;padding:2px 8px;font-size:11px;background:transparent;cursor:pointer}
+  .st-wait{color:#ff5a5a;border-color:#ff5a5a} .st-fixing{color:#ffb02e;border-color:#ffb02e}
+  .st-part{color:#00bfff;border-color:#00bfff} .st-done{color:#39ff14;border-color:#39ff14}
+  .light .st-wait{color:#ea7600;border-color:#ea7600} .light .st-fixing{color:#c77f00;border-color:#f2a100}
+  .light .st-part{color:#0047bb;border-color:#0047bb} .light .st-done{color:#3d8a35;border-color:#48a23f}
+  .stsel option{background:var(--bg);color:var(--text)}
+  .pill{border:1px solid;white-space:nowrap}
+
+  .kpi-glow{position:relative;overflow:hidden}
+  .kpi-glow::after{content:"";position:absolute;top:0;left:-100%;width:60%;height:100%;
+    background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 12%,transparent),transparent);animation:sweep 4s ease-in-out infinite}
+  @keyframes sweep{0%{left:-100%}60%{left:140%}100%{left:140%}}
+  .spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes rowin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .row-in{animation:rowin .35s ease both}
+  .tbl-scroll::-webkit-scrollbar{height:8px;width:8px}.tbl-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 30%,transparent);border-radius:8px}
+  #toast{transition:all .35s cubic-bezier(.2,.8,.2,1)}
+  .modal-back{background:rgba(0,0,0,.65);backdrop-filter:blur(4px)}
+  @keyframes pop{from{opacity:0;transform:scale(.96) translateY(10px)}to{opacity:1;transform:none}}
+  .pop{animation:pop .25s ease both}
+  .dropzone{border:1.5px dashed var(--field-border);transition:all .2s}
+  .dropzone.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  /* thumbnail */
+  .thumb{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--soft-border)}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb .x{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:9999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:18px;text-align:center;cursor:pointer}
+  /* report image grid */
+  .imggrid{display:grid;gap:2px}
+  .imggrid.n1{grid-template-columns:1fr}
+  .imggrid.n2{grid-template-columns:1fr 1fr}
+  .imggrid.n3,.imggrid.n4{grid-template-columns:1fr 1fr}
+  .imggrid img{width:100%;height:100%;object-fit:cover;max-height:150px;display:block}
+  .imggrid.n1 img{max-height:260px;object-fit:contain}
+</style>
+</head>
+
+<body class="dark cyber-bg min-h-screen">
+
+<header class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 pt-6 pb-2">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center gap-3">
+      <div id="appLogo" class="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center text-2xl accent">📡</div>
+      <div>
+        <h1 class="font-display text-xl sm:text-2xl tracking-widest brand-grad">CCTV&nbsp;OPS</h1>
+        <p class="font-thai text-xs -mt-0.5" style="color:var(--muted)">ระบบบันทึกรายงาน &amp; รับแจ้งซ่อมกล้องวงจรปิด</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="liveDot" class="w-2.5 h-2.5 rounded-full" style="background:var(--accent2);box-shadow:0 0 10px var(--accent2)"></span>
+      <span class="font-mono text-xs" style="color:var(--muted)" id="clock">--:--:--</span>
+      <button onclick="toggleTheme()" id="themeBtn" class="btn-ghost rounded-lg px-3 py-2 ml-1 text-sm" title="สลับโหมดมืด/สว่าง">🌙</button>
+      <button onclick="loadData()" class="btn-neon font-thai text-sm rounded-lg px-3 py-2">↻ รีเฟรช</button>
+    </div>
+  </div>
+</header>
+
+<section class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 mt-4">
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
+    <!-- งานทั้งหมด -->
+    <div class="rounded-2xl p-4 relative overflow-hidden card-hover" style="background:linear-gradient(135deg,#00b2a9,#00897f);box-shadow:0 8px 20px rgba(0,178,169,.30)">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 48%);pointer-events:none"></div>
+      <div class="relative flex items-center justify-between">
+        <span class="font-thai text-[10px] px-2 py-0.5 rounded-full" style="background:rgba(255,255,255,.24);color:#fff">สรุปยอด</span><span class="text-lg">📋</span></div>
+      <p class="font-display text-4xl mt-3 leading-none relative" style="color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.18)" id="kpiTotal">0</p>
+      <p class="font-thai text-sm mt-1 relative" style="color:#fff;font-weight:600">งานทั้งหมด</p>
+      <p class="font-thai text-[11px] relative" style="color:rgba(255,255,255,.85)">รายการในระบบ</p>
+    </div>
+    <!-- รอดำเนินการ -->
+    <div class="rounded-2xl p-4 relative overflow-hidden card-hover" style="background:linear-gradient(135deg,#f0890a,#d96f00);box-shadow:0 8px 20px rgba(234,118,0,.30)">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 48%);pointer-events:none"></div>
+      <div class="relative flex items-center justify-between">
+        <span class="font-thai text-[10px] px-2 py-0.5 rounded-full" style="background:rgba(255,255,255,.24);color:#fff">รอคิว</span><span class="text-lg">⏳</span></div>
+      <p class="font-display text-4xl mt-3 leading-none relative" style="color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.18)" id="kpiWait">0</p>
+      <p class="font-thai text-sm mt-1 relative" style="color:#fff;font-weight:600">รอดำเนินการ</p>
+      <p class="font-thai text-[11px] relative" style="color:rgba(255,255,255,.85)">ยังไม่เริ่มซ่อม</p>
+    </div>
+    <!-- กำลังซ่อม / รออะไหล่ -->
+    <div class="rounded-2xl p-4 relative overflow-hidden card-hover" style="background:linear-gradient(135deg,#f4ad12,#e08e00);box-shadow:0 8px 20px rgba(242,161,0,.30)">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 48%);pointer-events:none"></div>
+      <div class="relative flex items-center justify-between">
+        <span class="font-thai text-[10px] px-2 py-0.5 rounded-full" style="background:rgba(255,255,255,.26);color:#7a4d00">ดำเนินการ</span><span class="text-lg">🛠️</span></div>
+      <p class="font-display text-4xl mt-3 leading-none relative" style="color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.18)" id="kpiProgress">0</p>
+      <p class="font-thai text-sm mt-1 relative" style="color:#fff;font-weight:600">กำลังซ่อม / รออะไหล่</p>
+      <p class="font-thai text-[11px] relative" style="color:rgba(255,255,255,.9)">อยู่ระหว่างจัดการ</p>
+    </div>
+    <!-- ซ่อมเสร็จแล้ว -->
+    <div class="rounded-2xl p-4 relative overflow-hidden card-hover" style="background:linear-gradient(135deg,#4eb544,#3a8a31);box-shadow:0 8px 20px rgba(72,162,63,.30)">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 48%);pointer-events:none"></div>
+      <div class="relative flex items-center justify-between">
+        <span class="font-thai text-[10px] px-2 py-0.5 rounded-full" style="background:rgba(255,255,255,.24);color:#fff">สำเร็จ</span><span class="text-lg">✅</span></div>
+      <p class="font-display text-4xl mt-3 leading-none relative" style="color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.18)" id="kpiDone">0</p>
+      <p class="font-thai text-sm mt-1 relative" style="color:#fff;font-weight:600">ซ่อมเสร็จแล้ว</p>
+      <p class="font-thai text-[11px] relative" style="color:rgba(255,255,255,.85)">สำเร็จ <span id="kpiPct">0%</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ANALYTICS -->
+<section class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 mt-4">
+  <div class="glass rounded-2xl p-5 lg:p-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+      <h2 class="font-display text-sm tracking-widest accent flex items-center gap-2"><span>📊</span> ภาพรวมเชิงวิเคราะห์</h2>
+      <div class="flex items-center gap-2">
+        <button onclick="exportCSV()" class="btn-ghost font-thai text-xs rounded-lg px-3 py-2">⬇️ Export CSV</button>
+        <button onclick="openSummary()" class="btn-neon font-thai text-xs rounded-lg px-3 py-2">📈 สรุปนำเสนอ (ดูตัวอย่าง)</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+      <div class="rounded-xl p-3 card-hover" style="background:var(--field-bg);border:1px solid var(--soft-border);border-top:3px solid #ea7600">
+        <p class="font-thai text-xs mb-2 font-medium" style="color:var(--text)">🍩 สัดส่วนตามสถานะ</p>
+        <div style="height:230px;position:relative"><canvas id="chartStatus"></canvas></div>
+      </div>
+      <div class="rounded-xl p-3 card-hover" style="background:var(--field-bg);border:1px solid var(--soft-border);border-top:3px solid #00b2a9">
+        <p class="font-thai text-xs mb-2 font-medium" style="color:var(--text)">🏢 จำนวนงานตามโซน</p>
+        <div style="height:230px;position:relative"><canvas id="chartZone"></canvas></div>
+      </div>
+      <div class="rounded-xl p-3 card-hover" style="background:var(--field-bg);border:1px solid var(--soft-border);border-top:3px solid #48a23f">
+        <p class="font-thai text-xs mb-2 font-medium" style="color:var(--text)">📶 จำนวนงานตามชั้น</p>
+        <div style="height:230px;overflow:auto" id="floorList" class="tbl-scroll font-thai"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 mt-5 grid lg:grid-cols-5 gap-4 lg:gap-6 xl:gap-8 pb-10">
+
+  <!-- FORM -->
+  <section class="lg:col-span-2 glass rounded-2xl p-5 lg:p-6">
+    <h2 class="font-display text-sm tracking-widest accent mb-4 flex items-center gap-2"><span>▣</span> บันทึกรับแจ้งซ่อม</h2>
+    <div class="space-y-3 font-thai text-sm">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">ว/ด/ป (พ.ศ.)</label><input id="f_date" class="field w-full rounded-lg px-3 py-2 mt-1 font-mono" placeholder="วว/ดด/ปปปป" /></div>
+        <div><label class="text-xs" style="color:var(--muted)">เวลา</label><input id="f_time" class="field w-full rounded-lg px-3 py-2 mt-1 font-mono" placeholder="ชช:นน:วว" /></div>
+      </div>
+      <div class="flex items-center gap-2 -mt-1">
+        <input type="date" id="f_datepick" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="f_date.value=isoToBE(this.value)" title="เลือกวันที่ (ย้อนหลังได้)" />
+        <input type="time" id="f_timepick" step="1" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="f_time.value=timeText(this.value)" title="เลือกเวลา" />
+        <button onclick="setFormNow()" class="btn-ghost rounded-lg px-2.5 py-1.5 text-xs whitespace-nowrap" title="ตั้งเป็นวันเวลาปัจจุบัน">🔄 ตอนนี้</button>
+      </div>
+      <p class="text-[11px] -mt-1" style="color:var(--muted)">💡 พิมพ์แก้เอง หรือเลือกจากปฏิทิน (บันทึกย้อนหลังได้)</p>
+      <div><label class="text-xs" style="color:var(--muted)">จุดกล้อง <span class="text-neonpink">*</span></label><input id="f_point" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="เช่น CAM-12 ทางเข้าหลัก" /></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">โซน <span class="text-neonpink">*</span></label><select id="f_zone" class="field w-full rounded-lg px-3 py-2 mt-1"><option value="">— เลือก —</option><option>ในศูนย์</option><option>ลานจอด</option><option>รอบอาคาร</option></select></div>
+        <div><label class="text-xs" style="color:var(--muted)">ชั้น <span class="text-neonpink">*</span></label><select id="f_floor" class="field w-full rounded-lg px-3 py-2 mt-1"><option value="">— เลือก —</option><option>Floor B</option><option>B ครึ่ง</option><option>1</option><option>1 ครึ่ง</option><option>2</option><option>2 ครึ่ง</option><option>3</option><option>3 ครึ่ง</option><option>4</option><option>4 ครึ่ง</option><option>5</option><option>Rooftop</option></select></div>
+      </div>
+      <div><label class="text-xs" style="color:var(--muted)">รายละเอียดอาการ <span class="text-neonpink">*</span></label><textarea id="f_detail" rows="2" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="เช่น ภาพไม่ขึ้น / สัญญาณขาดหาย"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">เลขรับแจ้ง / SN</label><input id="f_sn" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="SN / เลขที่งาน" /></div>
+        <div><label class="text-xs" style="color:var(--muted)">จนท.รับงาน</label><input id="f_staff" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="ชื่อผู้รับงาน" /></div>
+      </div>
+      <div><label class="text-xs" style="color:var(--muted)">สถานะการซ่อม <span class="text-neonpink">*</span></label><select id="f_status" class="field w-full rounded-lg px-3 py-2 mt-1"><option>รอดำเนินการ</option><option>กำลังซ่อม</option><option>รออะไหล่</option><option>เสร็จสิ้น</option></select></div>
+      <div><label class="text-xs" style="color:var(--muted)">หมายเหตุ</label><textarea id="f_note" rows="2" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="ข้อมูลเพิ่มเติม (ถ้ามี)"></textarea></div>
+
+      <!-- แนบรูปสูงสุด 4 -->
+      <div>
+        <label class="text-xs" style="color:var(--muted)">แนบรูปภาพ (สูงสุด 4 ภาพ • เก็บลง Drive อัตโนมัติ)</label>
+        <div id="formThumbs" class="grid grid-cols-4 gap-2 mt-1"></div>
+        <div id="formDrop" class="dropzone rounded-lg p-3 mt-2 text-center cursor-pointer" onclick="document.getElementById('f_file').click()">
+          <input id="f_file" type="file" accept="image/*" multiple class="hidden" onchange="onFormFiles(this.files)" />
+          <p id="f_dzText" class="text-xs" style="color:var(--muted)">📷 แตะถ่าย/เลือกรูป (เลือกหลายรูปได้) หรือ ลากไฟล์มาวาง</p>
+        </div>
+      </div>
+
+      <button id="submitBtn" onclick="submitForm()" class="btn-neon w-full rounded-lg py-3 font-thai font-medium tracking-wide mt-1 flex items-center justify-center gap-2">
+        <span id="submitLabel">💾 บันทึกข้อมูล</span>
+        <svg id="submitSpin" class="hidden spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- TABLE -->
+  <section class="lg:col-span-3 glass rounded-2xl p-5 lg:p-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+      <h2 class="font-display text-sm tracking-widest accent2 flex items-center gap-2"><span>▤</span> รายการแจ้งซ่อมล่าสุด</h2>
+      <button onclick="captureTable()" class="btn-ghost font-thai text-xs rounded-lg px-3 py-2">📸 ภาพรวมตาราง</button>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2 mb-3 font-thai text-sm">
+      <input id="search" oninput="renderTable()" class="field flex-1 rounded-lg px-3 py-2" placeholder="🔍 ค้นหาจุดกล้อง / SN / จนท." />
+      <select id="filterStatus" onchange="renderTable()" class="field rounded-lg px-3 py-2 sm:w-44"><option value="">ทุกสถานะ</option><option>รอดำเนินการ</option><option>กำลังซ่อม</option><option>รออะไหล่</option><option>เสร็จสิ้น</option></select>
+    </div>
+    <p class="font-thai text-[11px] mb-2" style="color:var(--muted)">👆 แตะที่รายการใดก็ได้ เพื่อเปิดใบรายงาน → แนบรูป/สรุป → บันทึกเป็น PNG หรือ PDF</p>
+    <div id="captureArea" class="rounded-xl overflow-hidden">
+      <div class="tbl-scroll overflow-x-auto">
+        <table class="w-full text-left font-thai text-xs min-w-[700px]">
+          <thead><tr style="color:var(--muted)" class="border-b">
+            <th class="py-2 pr-2">ว/ด/ป</th><th class="py-2 pr-2">เวลา</th><th class="py-2 pr-2">จุดกล้อง</th><th class="py-2 pr-2">โซน/ชั้น</th>
+            <th class="py-2 pr-2">อาการ</th><th class="py-2 pr-2">จนท.</th><th class="py-2 pr-2">สถานะ (แก้ได้)</th><th class="py-2 pr-2 text-center">รายงาน</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="hidden text-center py-10 font-thai text-sm" style="color:var(--muted)">— ไม่พบรายการ —</div>
+    </div>
+  </section>
+</main>
+
+<!-- REPORT MODAL -->
+<div id="reportModal" class="hidden fixed inset-0 z-50 modal-back flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+  <div class="pop glass rounded-2xl w-full max-w-md my-4">
+    <div class="flex items-center justify-between px-4 py-3 border-b" style="border-color:var(--soft-border)">
+      <h3 class="font-display text-sm tracking-widest accent">📄 ใบรายงาน</h3>
+      <div class="flex items-center gap-1.5">
+        <button onclick="openEdit()" class="btn-ghost rounded-lg px-2.5 py-1 text-xs font-thai" title="แก้ไขข้อมูล">✏️ แก้ไข</button>
+        <button onclick="deleteRecord()" class="btn-ghost rounded-lg px-2.5 py-1 text-xs font-thai" style="border-color:#ff5a5a;color:#ff5a5a" title="ลบรายการ">🗑️ ลบ</button>
+        <button onclick="closeReport()" class="btn-ghost rounded-lg px-2.5 py-1 text-sm">✕</button>
+      </div>
+    </div>
+    <div class="p-4 space-y-4">
+      <div id="reportCard" class="rounded-xl overflow-hidden" style="background:#ffffff;border:1px solid var(--soft-border)"></div>
+
+      <div class="space-y-3 font-thai text-sm">
+        <div id="reportThumbs" class="grid grid-cols-4 gap-2"></div>
+        <div id="dropzone" class="dropzone rounded-lg p-3 text-center cursor-pointer" onclick="document.getElementById('rcFile').click()">
+          <input id="rcFile" type="file" accept="image/*" multiple class="hidden" onchange="onReportFiles(this.files)" />
+          <p style="color:var(--muted)" id="dzText">🖼️ แตะเพิ่มภาพในรายงาน (สูงสุด 4 ภาพ)</p>
+        </div>
+        <div><label class="text-xs" style="color:var(--muted)">หมายเหตุ / สรุปการแก้ไข (แสดงในใบรายงาน)</label>
+          <textarea id="rcNoteInput" rows="2" oninput="syncNote()" class="field w-full rounded-lg px-3 py-2 mt-1" placeholder="พิมพ์สรุปการแก้ไข..."></textarea></div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="saveReportPNG()" class="btn-neon rounded-lg py-3 font-medium flex items-center justify-center gap-2"><span id="pngLabel">🖼️ บันทึกรูป PNG (ส่ง LINE)</span></button>
+          <button onclick="saveReportPDF()" class="btn-ghost rounded-lg py-3 font-medium flex items-center justify-center gap-2"><span id="pdfLabel">📄 บันทึก PDF</span><svg id="pdfSpin" class="hidden spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-linecap="round"/></svg></button>
+        </div>
+        <p class="text-[11px] text-center" style="color:var(--muted)">บนมือถือ (iPhone) ถ้าไฟล์ไม่ดาวน์โหลด ให้กดค้างที่ภาพแล้วเลือก “บันทึก”</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" class="hidden fixed inset-0 z-[55] modal-back flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+  <div class="pop glass rounded-2xl w-full max-w-md my-4">
+    <div class="flex items-center justify-between px-4 py-3 border-b" style="border-color:var(--soft-border)">
+      <h3 class="font-display text-sm tracking-widest accent">✏️ แก้ไขรายการ</h3>
+      <button onclick="closeEdit()" class="btn-ghost rounded-lg px-2.5 py-1 text-sm">✕</button>
+    </div>
+    <div class="p-4 space-y-3 font-thai text-sm">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">ว/ด/ป (พ.ศ.)</label><input id="e_date" class="field w-full rounded-lg px-3 py-2 mt-1 font-mono" /></div>
+        <div><label class="text-xs" style="color:var(--muted)">เวลา</label><input id="e_time" class="field w-full rounded-lg px-3 py-2 mt-1 font-mono" /></div>
+      </div>
+      <div class="flex items-center gap-2 -mt-1">
+        <input type="date" id="e_datepick" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="e_date.value=isoToBE(this.value)" />
+        <input type="time" id="e_timepick" step="1" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="e_time.value=timeText(this.value)" />
+      </div>
+      <div><label class="text-xs" style="color:var(--muted)">จุดกล้อง <span class="text-neonpink">*</span></label><input id="e_point" class="field w-full rounded-lg px-3 py-2 mt-1" /></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">โซน</label><select id="e_zone" class="field w-full rounded-lg px-3 py-2 mt-1"><option>ในศูนย์</option><option>ลานจอด</option><option>รอบอาคาร</option></select></div>
+        <div><label class="text-xs" style="color:var(--muted)">ชั้น</label><select id="e_floor" class="field w-full rounded-lg px-3 py-2 mt-1"><option>Floor B</option><option>B ครึ่ง</option><option>1</option><option>1 ครึ่ง</option><option>2</option><option>2 ครึ่ง</option><option>3</option><option>3 ครึ่ง</option><option>4</option><option>4 ครึ่ง</option><option>5</option><option>Rooftop</option></select></div>
+      </div>
+      <div><label class="text-xs" style="color:var(--muted)">รายละเอียดอาการ</label><textarea id="e_detail" rows="2" class="field w-full rounded-lg px-3 py-2 mt-1"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs" style="color:var(--muted)">เลขรับแจ้ง / SN</label><input id="e_sn" class="field w-full rounded-lg px-3 py-2 mt-1" /></div>
+        <div><label class="text-xs" style="color:var(--muted)">จนท.รับงาน</label><input id="e_staff" class="field w-full rounded-lg px-3 py-2 mt-1" /></div>
+      </div>
+      <div><label class="text-xs" style="color:var(--muted)">สถานะการซ่อม</label><select id="e_status" class="field w-full rounded-lg px-3 py-2 mt-1"><option>รอดำเนินการ</option><option>กำลังซ่อม</option><option>รออะไหล่</option><option>เสร็จสิ้น</option></select></div>
+      <div><label class="text-xs" style="color:var(--muted)">หมายเหตุ</label><textarea id="e_note" rows="2" class="field w-full rounded-lg px-3 py-2 mt-1"></textarea></div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="saveEdit()" class="btn-neon rounded-lg py-3 font-medium flex items-center justify-center gap-2"><span id="eLabel">💾 บันทึกการแก้ไข</span><svg id="eSpin" class="hidden spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-linecap="round"/></svg></button>
+        <button onclick="closeEdit()" class="btn-ghost rounded-lg py-3 font-medium">ยกเลิก</button>
+      </div>
+      <button onclick="deleteRecord()" class="w-full rounded-lg py-2.5 font-medium text-sm" style="border:1px solid #ff5a5a;color:#ff5a5a;background:transparent">🗑️ ลบรายการนี้</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUMMARY PREVIEW MODAL -->
+<div id="summaryModal" class="hidden fixed inset-0 z-[58] modal-back flex items-start justify-center p-3 overflow-y-auto">
+  <div class="pop glass rounded-2xl w-full max-w-3xl my-4">
+    <div class="flex items-center justify-between px-4 py-3 border-b" style="border-color:var(--soft-border)">
+      <h3 class="font-display text-sm tracking-widest accent">📈 ตัวอย่างรายงานสรุป</h3>
+      <button onclick="closeSummary()" class="btn-ghost rounded-lg px-2.5 py-1 text-sm">✕</button>
+    </div>
+    <div class="p-4 space-y-3">
+      <!-- ตัวกรองช่วงวันที่ -->
+      <div class="flex flex-wrap items-center gap-2 font-thai text-sm">
+        <span class="text-xs" style="color:var(--muted)">ช่วงวันที่:</span>
+        <button data-range="all" onclick="setSummaryRange('all')" class="rounded-lg px-3 py-1.5 text-xs" style="border:1px solid var(--accent);background:var(--accent);color:#fff">ทั้งหมด</button>
+        <button data-range="week" onclick="setSummaryRange('week')" class="rounded-lg px-3 py-1.5 text-xs" style="border:1px solid var(--soft-border);background:transparent;color:var(--text)">7 วันล่าสุด</button>
+        <button data-range="month" onclick="setSummaryRange('month')" class="rounded-lg px-3 py-1.5 text-xs" style="border:1px solid var(--soft-border);background:transparent;color:var(--text)">เดือนนี้</button>
+        <button data-range="custom" onclick="setSummaryRange('custom')" class="rounded-lg px-3 py-1.5 text-xs" style="border:1px solid var(--soft-border);background:transparent;color:var(--text)">กำหนดเอง</button>
+        <span class="ml-auto text-xs" style="color:var(--muted)"><b id="sumCount">0 รายการ</b></span>
+      </div>
+      <div id="customRange" class="flex items-center gap-2 font-thai text-sm" style="display:none">
+        <input type="date" id="sumFrom" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="renderSummaryPreview()" />
+        <span style="color:var(--muted)">ถึง</span>
+        <input type="date" id="sumTo" class="field rounded-lg px-2 py-1.5 text-xs flex-1" onchange="renderSummaryPreview()" />
+      </div>
+      <!-- พรีวิว -->
+      <div id="summaryPreview" class="rounded-xl overflow-auto" style="max-height:60vh;background:#fff;border:1px solid var(--soft-border)"></div>
+      <!-- ปุ่มออก -->
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="saveSummaryPNG()" class="btn-neon rounded-lg py-3 font-thai font-medium">🖼️ บันทึก PNG</button>
+        <button onclick="saveSummaryPDF()" class="btn-ghost rounded-lg py-3 font-thai font-medium">📄 บันทึก PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-20 opacity-0 glass rounded-xl px-5 py-3 font-thai text-sm z-[70] pointer-events-none"></div>
+
+<script>
+/* ============================================================
+   CCTV OPS — Cyber Edition v4 (multi-image up to 4)
+   ============================================================ */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvCA5ZZkim20AWB02JeWH523qEUXelEx0p-5bRoCjO8wFnsjMNYla2E0oOA7j4Fe456w/exec";
+const MAX_IMAGES = 4;
+
+let records = [];
+let currentRec = null;
+let formImages = [];     // dataURL[]
+let reportImages = [];   // dataURL[]
+
+const $ = id => document.getElementById(id);
+function pad(n){ return String(n).padStart(2,'0'); }
+function nowDate(){ const d=new Date(); return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+(d.getFullYear()+543); }
+function nowTime(){ const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+/* แปลงวันที่ระหว่าง พ.ศ. (dd/mm/yyyy) กับ ISO (yyyy-mm-dd) สำหรับ input type=date */
+function isoToBE(iso){ const m=(iso||'').match(/(\d{4})-(\d{2})-(\d{2})/); if(!m) return ''; return m[3]+'/'+m[2]+'/'+(parseInt(m[1],10)+543); }
+function beToISO(be){ const m=(be||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{3,4})/); if(!m) return ''; let y=parseInt(m[3],10); if(y>2400)y-=543; return y+'-'+pad(+m[2])+'-'+pad(+m[1]); }
+function timeText(t){ if(!t) return ''; return t.length===5? t+':00' : t; }   // "HH:mm" -> "HH:mm:ss"
+function setFormNow(){
+  const d=new Date();
+  f_date.value=nowDate(); f_time.value=nowTime();
+  f_datepick.value=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  f_timepick.value=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+function tick(){ $('clock').textContent=nowTime(); }
+setInterval(tick,1000); tick();
+
+function toggleTheme(){ const b=document.body, light=b.classList.toggle('light'); b.classList.toggle('dark',!light); $('themeBtn').textContent=light?'☀️':'🌙'; if(records.length) renderCharts(); }
+function toast(msg, ok=true){ const t=$('toast'); t.textContent=msg;
+  t.style.borderColor = ok ? 'rgba(57,255,20,.5)' : 'rgba(255,90,90,.6)';
+  t.classList.remove('translate-y-20','opacity-0'); clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.add('translate-y-20','opacity-0'),2800); }
+function statusClass(s){ if(s==='เสร็จสิ้น')return'st-done'; if(s==='กำลังซ่อม')return'st-fixing'; if(s==='รออะไหล่')return'st-part'; return'st-wait'; }
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- ย่อรูป + เพิ่มหลายรูปเข้า array (กันค้าง/พัง) ---------- */
+function resizeImage(file, cb, max=1280, q=0.85){
+  try{
+    const reader=new FileReader();
+    reader.onerror=()=>{ toast('อ่านไฟล์รูปไม่สำเร็จ',false); cb(null); };
+    reader.onload=e=>{
+      const img=new Image();
+      img.onerror=()=>{ toast('ไฟล์รูปเสียหาย',false); cb(null); };
+      img.onload=()=>{
+        try{
+          let w=img.width||0,h=img.height||0;
+          if(!w||!h){ cb(null); return; }
+          const s=Math.min(1,max/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s);
+          const c=document.createElement('canvas'); c.width=w; c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          cb(c.toDataURL('image/jpeg',q));
+        }catch(err){ console.error('resize',err); toast('ประมวลผลรูปไม่สำเร็จ',false); cb(null); }
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }catch(err){ console.error('reader',err); cb(null); }
+}
+function addImages(fileList, arr, onDone){
+  const files=[...(fileList||[])].filter(f=>f && f.type && f.type.startsWith('image/'));
+  if(!files.length){ toast('กรุณาเลือกไฟล์รูปภาพ',false); return; }
+  const room=MAX_IMAGES-arr.length;
+  if(room<=0){ toast('แนบได้สูงสุด '+MAX_IMAGES+' ภาพ',false); return; }
+  const take=files.slice(0,room);
+  if(files.length>room) toast('แนบได้สูงสุด '+MAX_IMAGES+' ภาพ',false);
+  let left=take.length;
+  const done=()=>{ if(--left<=0) onDone(); };
+  take.forEach(f=>resizeImage(f, d=>{ if(d) arr.push(d); done(); }));
+}
+
+/* ============================================================
+   LOAD (JSONP + timeout + cleanup)
+   ============================================================ */
+let rowsDirty=false;   // true หลังลบ/แก้ จนกว่าจะโหลดใหม่เสร็จ (กันอ้างเลขแถวผิด)
+let loadSeq=0;         // กันผลลัพธ์เก่าตอบช้ามาทับข้อมูลใหม่
+function loadData(){
+  const seq=++loadSeq;
+  $('liveDot').style.background='#f2a100';
+  const cb='cb_'+Date.now()+'_'+Math.floor(Math.random()*1e4);
+  let done=false;
+  const cleanup=()=>{ try{ delete window[cb]; }catch(e){} if(s&&s.parentNode) s.remove(); clearTimeout(timer); };
+  const timer=setTimeout(()=>{ if(done)return; done=true; if(seq===loadSeq){ toast('โหลดข้อมูลช้า/ไม่ตอบสนอง',false); $('liveDot').style.background='#ff5a5a'; } cleanup(); }, 15000);
+  window[cb]=function(data){
+    if(done)return; done=true;
+    if(seq!==loadSeq){ cleanup(); return; }   // มีการโหลดใหม่กว่าแล้ว ทิ้งผลเก่า
+    try{
+      const rows=(data&&Array.isArray(data.rows))?data.rows:(Array.isArray(data)?data:[]);
+      records=rows.map(normalizeRow);
+      rowsDirty=false;
+      refreshUI();
+      $('liveDot').style.background='var(--accent2)';
+    }catch(e){ console.error('parse',e); toast('อ่านข้อมูลผิดพลาด',false); $('liveDot').style.background='#ff5a5a'; }
+    cleanup();
+  };
+  const s=document.createElement('script');
+  s.src=SCRIPT_URL+(SCRIPT_URL.includes('?')?'&':'?')+'action=list&callback='+cb+'&_='+Date.now();
+  s.onerror=()=>{ if(done)return; done=true; if(seq===loadSeq){ toast('เชื่อมต่อ Apps Script ไม่ได้',false); $('liveDot').style.background='#ff5a5a'; } cleanup(); };
+  document.body.appendChild(s);
+}
+const STATUSES=['รอดำเนินการ','กำลังซ่อม','รออะไหล่','เสร็จสิ้น'];
+function t(v){ return (v==null?'':String(v)).trim(); }                 // trim อย่างเดียว (คงบรรทัด/ช่องว่างภายใน)
+function cleanStr(v){ return t(v).replace(/\s+/g,' '); }               // collapse สำหรับคีย์จัดกลุ่ม
+function normStatus(v){ const s=cleanStr(v); if(!s) return 'รอดำเนินการ';
+  const hit=STATUSES.find(x=>x===s); if(hit) return hit;
+  if(/เสร็จ/.test(s)) return 'เสร็จสิ้น';
+  if(/อะไหล่/.test(s)) return 'รออะไหล่';
+  if(/ซ่อม/.test(s)) return 'กำลังซ่อม';
+  if(/^รอ/.test(s)) return 'รอดำเนินการ';
+  return s;
+}
+function normalizeRow(r){
+  const base={row:null,date:'',time:'',point:'',zone:'',floor:'',detail:'',sn:'',staff:'',status:'รอดำเนินการ',note:'',image:''};
+  if(r==null) return base;
+  if(Array.isArray(r)){
+    return { row:null, date:t(r[0]), time:t(r[1]), point:t(r[2]), zone:cleanStr(r[3]),
+        floor:cleanStr(r[4]), detail:t(r[5]), sn:t(r[6]), staff:t(r[7]),
+        status:normStatus(r[8]), note:t(r[9]), image:t(r[10]) };
+  }
+  return { row:(typeof r.row==='number'?r.row:null),
+      date:t(r.date||r['ว-ด-ป']), time:t(r.time||r['เวลา']), point:t(r.point||r['จุดกล้อง']),
+      zone:cleanStr(r.zone), floor:cleanStr(r.floor!=null&&r.floor!==''?r.floor:r['ชั้น']),
+      detail:t(r.detail||r['รายละเอียด']), sn:t(r.sn), staff:t(r.staff),
+      status:normStatus(r.status||r['สถานะการซ่อม']), note:t(r.note||r['หมายเหตุ']), image:t(r.image) };
+}
+
+/* ============================================================
+   FORM IMAGES
+   ============================================================ */
+function onFormFiles(fl){ addImages(fl, formImages, renderFormThumbs); }
+function removeFormImage(i){ formImages.splice(i,1); renderFormThumbs(); }
+function clearFormImages(){ formImages=[]; renderFormThumbs(); }
+function renderFormThumbs(){
+  $('formThumbs').innerHTML=formImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}"/><span class="x" onclick="removeFormImage(${i})">✕</span></div>`).join('');
+  $('f_dzText').textContent = formImages.length? `✅ แนบแล้ว ${formImages.length}/${MAX_IMAGES} ภาพ (แตะเพื่อเพิ่ม)` : '📷 แตะถ่าย/เลือกรูป (เลือกหลายรูปได้) หรือ ลากไฟล์มาวาง';
+  $('f_file').value='';
+}
+(function(){ const dz=$('formDrop'); ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
+  dz.addEventListener('drop',e=>{ if(e.dataTransfer.files.length) onFormFiles(e.dataTransfer.files); }); })();
+
+/* ============================================================
+   SUBMIT
+   ============================================================ */
+function validDateStr(s){ return /^\d{1,2}\/\d{1,2}\/\d{3,4}$/.test((s||'').trim()); }
+function validTimeStr(s){ return /^\d{1,2}:\d{2}(:\d{2})?$/.test((s||'').trim()); }
+function validate(){ const reqs=['f_point','f_zone','f_floor','f_detail']; let ok=true,first=null;
+  reqs.forEach(id=>{ const el=$(id); if(!el.value.trim()){ el.classList.add('invalid'); ok=false; first=first||el; } else el.classList.remove('invalid'); });
+  if(!ok){ toast('กรุณากรอกข้อมูลที่มี * ให้ครบ',false); if(first)first.focus(); return false; }
+  if(f_date.value.trim() && !validDateStr(f_date.value)){ toast('รูปแบบวันที่ไม่ถูกต้อง (วว/ดด/ปปปป) หรือใช้ปฏิทิน',false); f_date.focus(); return false; }
+  if(f_time.value.trim() && !validTimeStr(f_time.value)){ toast('รูปแบบเวลาไม่ถูกต้อง (ชช:นน:วว)',false); f_time.focus(); return false; }
+  return true; }
+
+let submitting=false;
+async function submitForm(){
+  if(submitting) return;
+  if(!validate())return;
+  const rec={ date:(f_date.value.trim()||nowDate()), time:(f_time.value.trim()||nowTime()), point:f_point.value.trim(), zone:f_zone.value, floor:f_floor.value,
+    detail:f_detail.value.trim(), sn:f_sn.value.trim(), staff:f_staff.value.trim(), status:f_status.value, note:f_note.value.trim() };
+  if(formImages.length) rec.images=formImages;
+  submitting=true; setLoading(true);
+  try{
+    await fetch(SCRIPT_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) });
+    toast('บันทึกลง Google Sheets แล้ว ✓'); resetForm(); setTimeout(loadData, formImages.length?1800:900);
+  }catch(e){ toast('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง',false); } finally{ submitting=false; setLoading(false); }
+}
+function setLoading(on){ submitBtn.disabled=on; submitLabel.textContent=on?'กำลังบันทึก...':'💾 บันทึกข้อมูล'; submitSpin.classList.toggle('hidden',!on); }
+function resetForm(){ ['f_point','f_detail','f_sn','f_staff','f_note'].forEach(id=>$(id).value=''); f_zone.value=''; f_floor.value=''; f_status.value='รอดำเนินการ'; clearFormImages(); setFormNow(); }
+
+/* ============================================================
+   RENDER + EDIT STATUS
+   ============================================================ */
+function refreshUI(){ renderKPI(); renderTable(); renderCharts(); }
+function renderKPI(){ const total=records.length;
+  const done=records.filter(r=>r.status==='เสร็จสิ้น').length;
+  kpiTotal.textContent=total;
+  kpiWait.textContent=records.filter(r=>r.status==='รอดำเนินการ').length;
+  kpiProgress.textContent=records.filter(r=>r.status==='กำลังซ่อม'||r.status==='รออะไหล่').length;
+  kpiDone.textContent=done;
+  $('kpiPct').textContent=(total?Math.round(done/total*100):0)+'%'; }
+
+/* ============================================================
+   ANALYTICS — กราฟ + Export
+   ============================================================ */
+let charts={};
+function statusCounts(recs){ recs=recs||records; const o={'รอดำเนินการ':0,'กำลังซ่อม':0,'รออะไหล่':0,'เสร็จสิ้น':0};
+  recs.forEach(r=>{ if(o[r.status]==null)o[r.status]=0; o[r.status]++; }); return o; }
+function groupBy(key,recs){ recs=recs||records; const o={}; recs.forEach(r=>{ const k=(r[key]||'-')||'-'; o[k]=(o[k]||0)+1; }); return o; }
+const FLOOR_ORDER=['Floor B','B ครึ่ง','1','1 ครึ่ง','2','2 ครึ่ง','3','3 ครึ่ง','4','4 ครึ่ง','5','Rooftop'];
+function sortFloors(keys){ return keys.slice().sort((a,b)=>{ let ia=FLOOR_ORDER.indexOf(a), ib=FLOOR_ORDER.indexOf(b); if(ia<0)ia=999; if(ib<0)ib=999; return ia-ib || String(a).localeCompare(String(b),'th'); }); }
+
+function renderCharts(){
+  renderFloorList();
+  if(typeof Chart==='undefined') return;
+  const tc = document.body.classList.contains('light') ? '#33505f' : '#9fc4d4';
+  const grid = document.body.classList.contains('light') ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.08)';
+  Chart.defaults.font.family='Kanit, sans-serif';
+  Chart.defaults.color=tc;
+
+  // donut สถานะ (สีตามโหมด + อิงชื่อสถานะ ไม่อิงลำดับ)
+  const dark=!document.body.classList.contains('light');
+  const stMap = dark ? {'รอดำเนินการ':'#ff5a5a','กำลังซ่อม':'#ffb02e','รออะไหล่':'#00bfff','เสร็จสิ้น':'#39ff14'}
+                     : {'รอดำเนินการ':'#ea7600','กำลังซ่อม':'#f2a100','รออะไหล่':'#0047bb','เสร็จสิ้น':'#48a23f'};
+  const zoneFill = dark ? '#22d3ee' : '#13b07a';
+  const sc=statusCounts();
+  drawChart('chartStatus','doughnut',{
+    labels:Object.keys(sc),
+    datasets:[{ data:Object.values(sc), backgroundColor:Object.keys(sc).map(s=>stMap[s]||'#9aa7a1'), borderColor:'rgba(0,0,0,0)', borderWidth:2 }]
+  },{ plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}, cutout:'58%' });
+
+  // bar โซน
+  const zc=groupBy('zone');
+  drawChart('chartZone','bar',{
+    labels:Object.keys(zc),
+    datasets:[{ data:Object.values(zc), backgroundColor:zoneFill, borderRadius:6, maxBarThickness:46 }]
+  },{ plugins:{legend:{display:false}}, scales:barScales(tc,grid) });
+}
+
+/* รายการจำนวนงานเรียงตามชั้น + ตัวเลขสรุป */
+function renderFloorList(){
+  const el=$('floorList'); if(!el) return;
+  const fc=groupBy('floor'); const keys=sortFloors(Object.keys(fc));
+  const total=records.length; const max=Math.max(1,...Object.values(fc).concat([1]));
+  if(!keys.length){ el.innerHTML='<div class="text-center py-8 text-xs" style="color:var(--muted)">— ไม่มีข้อมูล —</div>'; return; }
+  const rows=keys.map(k=>{
+    const c=fc[k], w=Math.round(c/max*100), pc=total?Math.round(c/total*100):0;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+      <span style="width:62px;font-size:12px;color:var(--text);white-space:nowrap">ชั้น ${esc(k)}</span>
+      <div style="flex:1;height:15px;background:var(--soft-border);border-radius:8px;overflow:hidden"><div style="height:15px;width:${w}%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:8px"></div></div>
+      <span style="width:46px;text-align:right;font-size:12px;color:var(--text)"><b>${c}</b> <span style="color:var(--muted);font-size:10px">(${pc}%)</span></span>
+    </div>`;
+  }).join('');
+  el.innerHTML=rows+`<div style="border-top:1px dashed var(--soft-border);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-size:12px">
+    <span style="color:var(--muted)">รวมทั้งหมด</span><b style="color:var(--accent)">${total} รายการ · ${keys.length} ชั้น</b></div>`;
+}
+function barScales(tc,grid){ return { x:{ticks:{color:tc,font:{size:10}},grid:{display:false}}, y:{beginAtZero:true,ticks:{color:tc,precision:0,stepSize:1},grid:{color:grid}} }; }
+function drawChart(id,type,data,options){
+  const el=$(id); if(!el) return;
+  if(charts[id]) charts[id].destroy();
+  charts[id]=new Chart(el,{ type, data, options:Object.assign({responsive:true,maintainAspectRatio:false,animation:{duration:500}},options) });
+}
+
+/* ---------- Export CSV (เปิดใน Excel ภาษาไทยได้) ---------- */
+function exportCSV(){
+  if(!records.length){ toast('ยังไม่มีข้อมูล',false); return; }
+  try{
+    const head=['ว/ด/ป','เวลา','จุดกล้อง','โซน','ชั้น','รายละเอียด','เลขรับแจ้ง/SN','จนท.รับงาน','สถานะ','หมายเหตุ'];
+    // กัน CSV/formula injection: ค่าที่ขึ้นต้นด้วย = + - @ ใส่ ' นำหน้า
+    const cell=v=>{ let s=String(v==null?'':v); if(/^[=+\-@]/.test(s)) s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+    const rows=records.map(r=>[r.date,r.time,r.point,r.zone,r.floor,r.detail,r.sn,r.staff,r.status,r.note].map(cell).join(','));
+    const csv='\uFEFF'+head.map(cell).join(',')+'\r\n'+rows.join('\r\n');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='CCTV_data_'+nowDate().replace(/\//g,'-')+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    toast('Export CSV แล้ว ✓');
+  }catch(e){ console.error('csv',e); toast('Export CSV ไม่สำเร็จ',false); }
+}
+
+/* ---------- สร้างกราฟเป็นรูปภาพ (offscreen) สำหรับใบสรุป ---------- */
+function makeChartImage(type,data,options,w,h){
+  return new Promise((res,rej)=>{
+    if(typeof Chart==='undefined'){ rej(new Error('Chart.js ไม่พร้อม')); return; }
+    let c,ch;
+    try{
+      c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.style.cssText='position:fixed;left:-99999px;top:0';
+      document.body.appendChild(c);
+      ch=new Chart(c,{ type, data, options:Object.assign({responsive:false,animation:false,devicePixelRatio:2},options) });
+      requestAnimationFrame(()=>{ setTimeout(()=>{ try{ const url=c.toDataURL('image/png'); res(url); }catch(err){ rej(err); } finally{ try{ch.destroy();}catch(e){} if(c.parentNode)c.remove(); } }, 160); });
+    }catch(err){ try{if(ch)ch.destroy();}catch(e){} if(c&&c.parentNode)c.remove(); rej(err); }
+  });
+}
+
+/* ---------- โลโก้ CCTV OPS (SVG → data URI ใช้ได้ทั้งจอและ export) ---------- */
+function logoDataURI(){
+  const svg="<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'>"
+    +"<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#00b2a9'/><stop offset='.55' stop-color='#48a23f'/><stop offset='1' stop-color='#84bd00'/></linearGradient></defs>"
+    +"<rect x='4' y='4' width='88' height='88' rx='22' fill='url(#g)'/>"
+    +"<rect x='23' y='35' width='35' height='24' rx='6' fill='#ffffff'/>"
+    +"<path d='M58 41 L75 33 V61 L58 53 Z' fill='#ffffff'/>"
+    +"<circle cx='35' cy='47' r='6' fill='#0c3b34'/><circle cx='35' cy='47' r='2.4' fill='#84bd00'/>"
+    +"<rect x='27' y='64' width='30' height='5' rx='2.5' fill='#ffffff' opacity='.9'/>"
+    +"</svg>";
+  return 'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)));
+}
+
+/* ============================================================
+   ตัวกรองช่วงวันที่ของใบสรุป
+   ============================================================ */
+let summaryRange='all';
+function recToDate(r){
+  const iso=beToISO(r&&r.date||''); if(!iso) return null;
+  const t=(r.time||'').match(/^(\d{2}):(\d{2})(:(\d{2}))?/);
+  const d=new Date(iso+'T'+(t?(t[1]+':'+t[2]+':'+(t[4]||'00')):'00:00:00'));
+  return isNaN(d.getTime())?null:d;
+}
+function rangeBounds(){
+  const now=new Date(); let from=null,to=null;
+  if(summaryRange==='week'){ to=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59); from=new Date(now.getTime()-6*864e5); from.setHours(0,0,0,0); }
+  else if(summaryRange==='month'){ from=new Date(now.getFullYear(),now.getMonth(),1,0,0,0); to=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59); }
+  else if(summaryRange==='custom'){
+    const f=$('sumFrom').value, t=$('sumTo').value;
+    from=f?new Date(f+'T00:00:00'):null; to=t?new Date(t+'T23:59:59'):null;
+  }
+  return {from,to};
+}
+function getFilteredRecords(){
+  if(summaryRange==='all') return records.slice();
+  const {from,to}=rangeBounds();
+  return records.filter(r=>{ const d=recToDate(r); if(!d) return false;
+    if(from && d<from) return false; if(to && d>to) return false; return true; });
+}
+function rangeLabel(){
+  if(summaryRange==='week') return '7 วันล่าสุด';
+  if(summaryRange==='month'){ const m=new Date(); return 'เดือน '+m.toLocaleDateString('th-TH',{month:'long',year:'numeric'}); }
+  if(summaryRange==='custom'){ const f=$('sumFrom').value, t=$('sumTo').value; return (f?isoToBE(f):'…')+' ถึง '+(t?isoToBE(t):'…'); }
+  return 'ทั้งหมด';
+}
+
+/* ---------- สร้าง HTML ใบสรุป (รายละเอียดครบ) ---------- */
+async function buildSummaryHTML(recs){
+  const total=recs.length;
+  const sc=statusCounts(recs), zc=groupBy('zone',recs), fc=groupBy('floor',recs);
+  const done=sc['เสร็จสิ้น']||0, prog=(sc['กำลังซ่อม']||0)+(sc['รออะไหล่']||0), wait=sc['รอดำเนินการ']||0;
+  const pct=total?Math.round(done/total*100):0;
+
+  // KPI tile (ไอคอนในวงกลม + ตัวเลขใหญ่)
+  const kpi=(icon,label,val,col,tint)=>`<td style="width:25%;box-sizing:border-box;padding:5px;vertical-align:top">
+    <div style="background:#ffffff;border:1px solid #e6edea;border-radius:14px;padding:13px 10px;text-align:center">
+      <div style="width:36px;height:36px;border-radius:11px;background:${tint};margin:0 auto;text-align:center;font-size:18px;line-height:36px">${icon}</div>
+      <div style="font-size:28px;font-weight:800;color:${col};line-height:1;margin-top:8px">${val}</div>
+      <div style="font-size:11px;color:#6b8077;margin-top:3px">${htmlesc(label)}</div></div></td>`;
+
+  let donut='',zbar='';
+  try{
+    donut=await makeChartImage('doughnut',
+      { labels:Object.keys(sc), datasets:[{data:Object.values(sc),backgroundColor:Object.keys(sc).map(s=>({'รอดำเนินการ':'#ea7600','กำลังซ่อม':'#f2a100','รออะไหล่':'#0047bb','เสร็จสิ้น':'#48a23f'})[s]||'#9aa7a1'),borderColor:'#fff',borderWidth:3}] },
+      { cutout:'62%', plugins:{legend:{display:false}} }, 300,300);
+    zbar=await makeChartImage('bar',
+      { labels:Object.keys(zc), datasets:[{data:Object.values(zc),backgroundColor:'#00b2a9',borderRadius:8,maxBarThickness:54}] },
+      { plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#3a4a44',font:{family:'Kanit',size:12}},grid:{display:false}},y:{beginAtZero:true,ticks:{precision:0,stepSize:1,color:'#3a4a44'},grid:{color:'#eef1f0'}}} }, 320,300);
+  }catch(e){ console.error('summary charts',e); }
+
+  // breakdown สถานะ (จุดสี + ชื่อ + จำนวน + %) รวมสถานะแปลกปลอมด้วย
+  const stOrder=STATUSES.concat(Object.keys(sc).filter(k=>!STATUSES.includes(k)));
+  const stList=stOrder.map(s=>{ const c=sc[s]||0, p=total?Math.round(c/total*100):0;
+    return `<div style="display:flex;align-items:center;margin-bottom:7px">
+      <span style="width:11px;height:11px;border-radius:50%;background:${stColor(s)};margin-right:8px"></span>
+      <span style="flex:1;font-size:12px;color:#3a4a44">${htmlesc(s)}</span>
+      <span style="font-size:12px;font-weight:700;color:#1f2d28">${c}</span>
+      <span style="width:42px;text-align:right;font-size:11px;color:#8a9b93">${p}%</span></div>`; }).join('');
+
+  // งานตามชั้น (กราฟแท่งแนวนอน)
+  const fkeys=sortFloors(Object.keys(fc)), fmax=Math.max(1,...Object.values(fc).concat([1]));
+  const floorBars=fkeys.length?fkeys.map(k=>{ const c=fc[k], w=Math.round(c/fmax*100);
+    return `<div style="display:flex;align-items:center;margin-bottom:8px">
+      <span style="width:78px;font-size:12px;color:#3a4a44">ชั้น ${htmlesc(k)}</span>
+      <div style="flex:1;height:13px;background:#eef1f0;border-radius:7px;overflow:hidden"><div style="height:13px;width:${w}%;background:linear-gradient(90deg,#00b2a9,#48a23f);border-radius:7px"></div></div>
+      <span style="width:28px;text-align:right;font-weight:700;font-size:12px;color:#1f2d28">${c}</span></div>`; }).join('')
+    :'<div style="padding:14px;color:#9fb0a8;font-size:12px">— ไม่มีข้อมูล —</div>';
+
+  // รายการล่าสุด (รายละเอียดครบ + ป้ายสถานะ)
+  const recent=recs.slice(0,10).map((r,i)=>`<tr style="background:${i%2?'#f6f9f8':'#fff'}">
+    <td style="padding:6px 9px;white-space:nowrap;color:#6b8077">${htmlesc(r.date||'-')}</td>
+    <td style="padding:6px 9px;font-weight:600;color:#1f2d28">${htmlesc(r.point||'-')}</td>
+    <td style="padding:6px 9px;color:#6b8077">${htmlesc(r.zone||'-')}</td>
+    <td style="padding:6px 9px;text-align:center;color:#6b8077">${htmlesc(r.floor||'-')}</td>
+    <td style="padding:6px 9px;color:#6b8077">${htmlesc(r.sn||'-')}</td>
+    <td style="padding:6px 9px;color:#6b8077">${htmlesc(r.staff||'-')}</td>
+    <td style="padding:6px 9px;text-align:right"><span style="background:${stTint(r.status)};color:${stColor(r.status)};font-size:10.5px;padding:2px 9px;border-radius:99px;font-weight:700;white-space:nowrap">${htmlesc(r.status||'-')}</span></td></tr>`).join('');
+
+  const sh=(icon,t)=>`<div style="display:flex;align-items:center;margin-bottom:10px"><span style="width:4px;height:16px;background:#00b2a9;border-radius:2px;margin-right:8px"></span><span style="font-size:13px;font-weight:700;color:#1f2d28">${icon} ${t}</span></div>`;
+  const cardCSS='background:#ffffff;border:1px solid #e6edea;border-radius:14px;padding:14px 16px';
+
+  return `
+  <div style="font-family:Kanit,Arial,sans-serif;color:#1f2d28;background:#eef3f1">
+    <!-- header -->
+    <div style="background:linear-gradient(120deg,#00b2a9,#48a23f 70%,#84bd00);padding:20px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center">
+        <img src="${logoDataURI()}" style="width:44px;height:44px;margin-right:13px"/>
+        <div><div style="font-weight:700;letter-spacing:1.5px;font-size:19px;color:#03262b">CCTV OPS — รายงานสรุปภาพรวม</div>
+        <div style="font-size:11px;color:#eafff9">ระบบบันทึกและรับแจ้งซ่อมกล้องวงจรปิด</div></div></div>
+      <div style="text-align:right;color:#03262b;font-size:11px;line-height:1.6">ช่วงข้อมูล: <b>${htmlesc(rangeLabel())}</b><br>ออกรายงาน <b>${nowDate()} ${nowTime()}</b></div>
+    </div>
+
+    <div style="padding:16px">
+      <!-- KPI -->
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>
+        ${kpi('📋','งานทั้งหมด',total,'#00b2a9','#e6f7f5')}${kpi('⏳','รอดำเนินการ',wait,'#ea7600','#fdecdd')}
+        ${kpi('🛠️','กำลังดำเนินการ',prog,'#f2a100','#fdf3dd')}${kpi('✅','เสร็จสิ้น',done,'#48a23f','#e9f4e6')}
+      </tr></table>
+
+      <!-- progress -->
+      <div style="${cardCSS};margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+          <span style="font-size:13px;font-weight:700">ความคืบหน้าโดยรวม</span>
+          <span style="font-size:13px;font-weight:800;color:#48a23f">${pct}%</span></div>
+        <div style="height:16px;background:#eef1f0;border-radius:99px;overflow:hidden"><div style="height:16px;width:${pct}%;background:linear-gradient(90deg,#00b2a9,#48a23f)"></div></div>
+        <div style="font-size:11px;color:#6b8077;margin-top:7px">เสร็จสิ้น ${done} จาก ${total} งาน · กำลังดำเนินการ ${prog} · รอดำเนินการ ${wait}</div>
+      </div>
+
+      <!-- กราฟ 3 ใบเรียงแนวนอน: สถานะ → โซน → ชั้น -->
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:12px"><tr>
+        <td style="width:33.33%;padding-right:5px;vertical-align:top">
+          <div style="${cardCSS};height:100%">${sh('🍩','สัดส่วนตามสถานะ')}
+            ${donut?`<img src="${donut}" style="width:74%;display:block;margin:0 auto 8px"/>`:'—'}
+            ${stList}</div>
+        </td>
+        <td style="width:33.33%;padding:0 5px;vertical-align:top">
+          <div style="${cardCSS};height:100%">${sh('🏢','จำนวนงานตามโซน')}${zbar?`<img src="${zbar}" style="width:100%;display:block"/>`:'—'}</div>
+        </td>
+        <td style="width:33.33%;padding-left:5px;vertical-align:top">
+          <div style="${cardCSS};height:100%">${sh('📶','จำนวนงานตามชั้น')}${floorBars}</div>
+        </td>
+      </tr></table>
+
+      <!-- รายการล่าสุด เต็มความกว้าง -->
+      <div style="${cardCSS};margin-top:12px;padding-bottom:6px">${sh('🗂️','รายละเอียดรายการล่าสุด')}
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+          <tr style="color:#8a9b93;text-align:left;border-bottom:1px solid #e6edea">
+            <th style="padding:6px 9px;font-weight:600">วันที่</th><th style="padding:6px 9px;font-weight:600">จุดกล้อง</th>
+            <th style="padding:6px 9px;font-weight:600">โซน</th><th style="padding:6px 9px;font-weight:600;text-align:center">ชั้น</th>
+            <th style="padding:6px 9px;font-weight:600">SN</th><th style="padding:6px 9px;font-weight:600">จนท.</th>
+            <th style="padding:6px 9px;font-weight:600;text-align:right">สถานะ</th></tr>
+          ${recent||'<tr><td colspan="7" style="padding:10px;color:#9fb0a8">— ไม่มีข้อมูล —</td></tr>'}
+        </table></div>
+    </div>
+
+    <!-- footer -->
+    <div style="background:#2d2926;padding:11px 22px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;color:#7fe9d6;font-weight:600;letter-spacing:1px">CCTV OPS · Command Center</span>
+      <span style="font-size:10px;color:#9fb6bf;font-family:monospace">รวม ${total} รายการ · สำเร็จ ${pct}%</span></div>
+  </div>`;
+}
+
+/* ---------- หน้าตัวอย่าง + Export ---------- */
+function openSummary(){
+  if(!records.length){ toast('ยังไม่มีข้อมูล',false); return; }
+  summaryModal.classList.remove('hidden');
+  renderSummaryPreview();
+}
+function closeSummary(){ summaryModal.classList.add('hidden'); }
+function setSummaryRange(rng){
+  summaryRange=rng;
+  document.querySelectorAll('[data-range]').forEach(b=>{ const on=b.dataset.range===rng;
+    b.style.background=on?'var(--accent)':'transparent'; b.style.color=on?'#fff':'var(--text)'; b.style.borderColor=on?'var(--accent)':'var(--soft-border)'; });
+  $('customRange').style.display = rng==='custom'?'flex':'none';
+  renderSummaryPreview();
+}
+let summaryBusy=false;
+async function renderSummaryPreview(){
+  if(summaryBusy) return; summaryBusy=true;
+  const box=$('summaryPreview');
+  box.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)" class="font-thai">กำลังสร้างตัวอย่าง...</div>';
+  try{
+    const recs=getFilteredRecords();
+    $('sumCount').textContent=recs.length+' รายการ';
+    box.innerHTML=await buildSummaryHTML(recs);
+  }catch(e){ console.error(e); box.innerHTML='<div style="padding:20px;color:#e11d48" class="font-thai">สร้างตัวอย่างไม่สำเร็จ</div>'; }
+  finally{ summaryBusy=false; }
+}
+async function summaryCanvas(){
+  if(typeof html2canvas==='undefined') throw new Error('html2canvas ไม่พร้อม');
+  const recs=getFilteredRecords();
+  const node=document.createElement('div');
+  node.style.cssText='position:fixed;left:-99999px;top:0;width:760px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e5e9ee';
+  node.innerHTML=await buildSummaryHTML(recs);
+  document.body.appendChild(node);
+  await waitImages(node);
+  try{ return await html2canvas(node,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false}); }
+  finally{ if(node.parentNode) node.remove(); }
+}
+async function saveSummaryPNG(){
+  toast('กำลังสร้างใบสรุป...');
+  try{ const c=await summaryCanvas(); const a=document.createElement('a'); a.download='CCTV_summary_'+nowDate().replace(/\//g,'-')+'.png'; a.href=c.toDataURL('image/png'); document.body.appendChild(a); a.click(); a.remove(); toast('บันทึกใบสรุป (PNG) แล้ว ✓'); }
+  catch(e){ console.error(e); toast('สร้างใบสรุปไม่สำเร็จ',false); }
+}
+async function saveSummaryPDF(){
+  toast('กำลังสร้างใบสรุป...');
+  try{ if(!window.jspdf||!window.jspdf.jsPDF) throw new Error('jsPDF ไม่พร้อม');
+    const c=await summaryCanvas(); const { jsPDF }=window.jspdf; const w=c.width,h=c.height;
+    const pdf=new jsPDF({orientation:w>h?'l':'p',unit:'px',format:[w,h]}); pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,w,h);
+    pdf.save('CCTV_summary_'+nowDate().replace(/\//g,'-')+'.pdf'); toast('บันทึกใบสรุป (PDF) แล้ว ✓'); }
+  catch(e){ console.error(e); toast('สร้างใบสรุปไม่สำเร็จ',false); }
+}
+function statusSelect(r){
+  const opts=['รอดำเนินการ','กำลังซ่อม','รออะไหล่','เสร็จสิ้น'].map(o=>`<option ${o===r.status?'selected':''}>${o}</option>`).join('');
+  const dis=r.row?'':'disabled title="รีเฟรชก่อนจึงแก้ได้"';
+  return `<select class="stsel ${statusClass(r.status)}" ${dis} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateStatus(${r.row},this.value)">${opts}</select>`;
+}
+function renderTable(){
+  const q=(search.value||'').toLowerCase(), fs=filterStatus.value;
+  const rows=records.map((r,idx)=>({r,idx})).filter(({r})=>{
+    const mq=!q||[r.point,r.sn,r.staff].some(v=>(v||'').toLowerCase().includes(q));
+    return mq && (!fs||r.status===fs); });
+  tbody.innerHTML=rows.map(({r,idx},i)=>{
+    const n=r.image?r.image.split(',').filter(Boolean).length:0;
+    return `<tr onclick="openReport(${idx})" class="row-in border-b cursor-pointer hover:bg-emerald-400/5" style="border-color:var(--soft-border);animation-delay:${i*0.03}s" title="แตะเพื่อออกใบรายงาน">
+      <td class="py-2 pr-2 font-mono" style="color:var(--muted)">${esc(r.date)}</td>
+      <td class="py-2 pr-2 font-mono" style="color:var(--muted)">${esc(r.time)}</td>
+      <td class="py-2 pr-2 font-medium">${esc(r.point)} ${n?`<span title="${n} รูป">📎${n}</span>`:''}</td>
+      <td class="py-2 pr-2" style="color:var(--muted)">${esc(r.zone)} · ชั้น ${esc(r.floor)}</td>
+      <td class="py-2 pr-2 max-w-[140px] truncate" style="color:var(--muted)" title="${esc(r.detail)}">${esc(r.detail)}</td>
+      <td class="py-2 pr-2" style="color:var(--muted)">${esc(r.staff)||'-'}</td>
+      <td class="py-2 pr-2">${statusSelect(r)}</td>
+      <td class="py-2 pr-2 text-center whitespace-nowrap"><button onclick="event.stopPropagation();openReport(${idx})" class="btn-neon rounded-md px-2 py-1.5 text-[11px]">📄</button> <button onclick="event.stopPropagation();editRecord(${idx})" class="btn-ghost rounded-md px-2 py-1.5 text-[11px]">✏️</button></td>
+    </tr>`; }).join('');
+  emptyState.classList.toggle('hidden',rows.length>0);
+}
+async function updateStatus(row, status){
+  if(!row){ toast('กรุณากด ↻ รีเฟรช ก่อนแก้สถานะ',false); renderTable(); return; }
+  if(rowsDirty){ toast('กำลังซิงค์ข้อมูล… กด ↻ รีเฟรช แล้วลองใหม่',false); return; }
+  const rec=records.find(r=>r.row===row);
+  if(!rec){ toast('ไม่พบรายการ กรุณารีเฟรช',false); return; }
+  const prev=rec.status; rec.status=status; renderKPI(); renderTable(); renderCharts();
+  try{
+    await fetch(SCRIPT_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'updateStatus',row,status}) });
+    toast('อัปเดตสถานะแล้ว ✓');
+  }catch(e){ rec.status=prev; renderKPI(); renderTable(); renderCharts(); toast('อัปเดตไม่สำเร็จ ลองใหม่',false); }
+}
+
+/* ============================================================
+   REPORT MODAL (preview, multi-image) + PDF/PNG
+   ============================================================ */
+let reportToken=0;
+function openReport(idx){
+  const rec=records[idx];
+  if(!rec){ toast('ไม่พบรายการนี้ กรุณารีเฟรช',false); return; }
+  currentRec=rec; reportImages=[]; const token=++reportToken;
+  rcNoteInput.value=currentRec.note||'';
+  renderPreview(); renderReportThumbs();
+  reportModal.classList.remove('hidden');
+  if(currentRec.image){ const ids=String(currentRec.image).split(',').map(s=>s.trim()).filter(Boolean);
+    if(ids.length) dzText.textContent='⏳ กำลังโหลดรูปจากระบบ...';
+    ids.slice(0,MAX_IMAGES).forEach(id=>fetchStoredImage(id, token)); }
+}
+function closeReport(){ reportModal.classList.add('hidden'); }
+$('reportModal').addEventListener('click',e=>{ if(e.target.id==='reportModal') closeReport(); });
+
+function fetchStoredImage(id, token){
+  const cb='img_'+Math.random().toString(36).slice(2);
+  let done=false;
+  const cleanup=()=>{ try{ delete window[cb]; }catch(e){} if(s&&s.parentNode)s.remove(); clearTimeout(timer);
+    if(dzText.textContent.includes('กำลังโหลด')) dzText.textContent='🖼️ แตะเพิ่มภาพในรายงาน (สูงสุด 4 ภาพ)'; };
+  const timer=setTimeout(()=>{ if(done)return; done=true; cleanup(); }, 15000);
+  window[cb]=function(res){
+    if(done)return; done=true;
+    try{
+      // เพิ่มรูปเฉพาะเมื่อยังเป็นรายงานเดิม (กันรูปข้ามรายการเมื่อเปิด-ปิดเร็ว)
+      if(token===reportToken && res && res.ok && res.dataUrl && reportImages.length<MAX_IMAGES){
+        reportImages.push(res.dataUrl); renderPreview(); renderReportThumbs();
+      }
+    }catch(e){ console.error('imgb64',e); }
+    cleanup();
+  };
+  const s=document.createElement('script');
+  s.src=SCRIPT_URL+'?action=imgb64&id='+encodeURIComponent(id)+'&callback='+cb+'&_='+Date.now();
+  s.onerror=()=>{ if(done)return; done=true; cleanup(); };
+  document.body.appendChild(s);
+}
+
+/* ----- สีตามสถานะ (infographic) ----- */
+function stColor(s){ if(s==='เสร็จสิ้น')return'#48a23f'; if(s==='กำลังซ่อม')return'#e08f00'; if(s==='รออะไหล่')return'#0047bb'; return'#ea7600'; }
+function stTint(s){ if(s==='เสร็จสิ้น')return'#e9f4e6'; if(s==='กำลังซ่อม')return'#fdf3dd'; if(s==='รออะไหล่')return'#e6edfa'; return'#fdecdd'; }
+function htmlesc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ----- สร้าง HTML ใบรายงานแบบอินโฟกราฟิก (ใช้ทั้งพรีวิวและไฟล์ส่งออก) ----- */
+function buildReportHTML(){
+  const r=currentRec||{};
+  const note=$('rcNoteInput').value.trim();
+  const sc=stColor(r.status), tint=stTint(r.status);
+  const stages=['รอดำเนินการ','กำลังซ่อม','รออะไหล่','เสร็จสิ้น'];
+  let cur=stages.indexOf(r.status); if(cur<0) cur=0;
+  const pct=Math.round((cur+1)/stages.length*100);
+
+  // แกลเลอรีภาพ
+  const imgs=reportImages, n=imgs.length; let gallery='';
+  if(n===1){
+    gallery=`<img src="${imgs[0]}" style="width:100%;height:280px;object-fit:cover;display:block"/>`;
+  } else if(n){
+    const h=n===2?'180px':'150px';
+    gallery=`<div style="font-size:0;background:#0b1220">`+imgs.map(d=>
+      `<div style="display:inline-block;width:50%;box-sizing:border-box;padding:2px;vertical-align:top"><img src="${d}" style="width:100%;height:${h};object-fit:cover;display:block;border-radius:6px"/></div>`).join('')+`</div>`;
+  }
+
+  // การ์ดข้อมูล (table 2 คอลัมน์ ให้เรียงตรงกันเป๊ะ)
+  const card=(icon,label,val,col)=>`<td style="width:50%;box-sizing:border-box;padding:4px;vertical-align:top">
+    <div style="background:#f8fafc;border:1px solid #e7eef3;border-left:3px solid ${col};border-radius:10px;padding:10px 12px;min-height:54px">
+      <div style="font-size:10.5px;color:#74899a;letter-spacing:.2px">${icon}&nbsp;${htmlesc(label)}</div>
+      <div style="font-size:14.5px;font-weight:700;color:#13242f;margin-top:3px;line-height:1.25;word-break:break-word">${htmlesc(val||'-')}</div>
+    </div></td>`;
+
+  // แถบความคืบหน้าสถานะ
+  const dots=stages.map((s,i)=>{
+    const on=i<=cur, c=on?sc:'#d3dce2';
+    return `<td style="text-align:center;font-size:10px;color:${on?sc:'#9fb0ba'};font-weight:${i===cur?700:400};padding-top:5px">
+      <div style="width:13px;height:13px;border-radius:50%;background:${c};margin:0 auto 3px"></div>${htmlesc(s)}</td>`;
+  }).join('');
+
+  const secHead=(t)=>`<div style="padding:14px 18px 2px;font-size:12.5px;font-weight:700;color:#2d2926;border-bottom:1px solid #eef3f6;margin:0 0 6px">${t}</div>`;
+
+  return `
+  <div style="font-family:Kanit,Arial,sans-serif;color:#13242f;background:#ffffff">
+    <!-- header -->
+    <div style="background:linear-gradient(120deg,#00b2a9 0%,#48a23f 70%,#84bd00 100%);padding:16px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center">
+          <img src="${logoDataURI()}" style="width:34px;height:34px;margin-right:10px"/>
+          <div>
+            <div style="font-weight:700;letter-spacing:2px;font-size:15px;color:#03262b">CCTV REPAIR REPORT</div>
+            <div style="font-size:10px;color:#e8fff8;letter-spacing:1px;margin-top:1px">ใบรายงานการแจ้งซ่อมกล้องวงจรปิด</div>
+          </div>
+        </div>
+        <span style="background:#ffffff;color:${sc};border:1.5px solid ${sc};font-size:12px;padding:4px 13px;border-radius:999px;font-weight:700;white-space:nowrap">${htmlesc(r.status||'')}</span>
+      </div>
+    </div>
+
+    <!-- gallery -->
+    ${gallery}
+
+    <!-- progress -->
+    <div style="padding:14px 18px 6px">
+      <div style="font-size:10.5px;color:#74899a;margin-bottom:6px">ความคืบหน้าการซ่อม</div>
+      <div style="height:8px;background:#e9eef2;border-radius:999px;overflow:hidden">
+        <div style="height:8px;width:${pct}%;background:${sc}"></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:2px">${dots}</table>
+    </div>
+
+    <!-- info cards -->
+    ${secHead('📋 รายละเอียดการแจ้งซ่อม')}
+    <div style="padding:0 14px 2px">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <tr>${card('📍','จุดกล้อง',r.point,'#00b2a9')}${card('🕒','วันที่ / เวลา',((r.date||'-')+'  ·  '+(r.time||'-')),'#48a23f')}</tr>
+        <tr>${card('🗺️','โซน',r.zone,'#84bd00')}${card('🏢','ชั้น',r.floor,'#0047bb')}</tr>
+        <tr>${card('🔖','เลขรับแจ้ง / SN',r.sn,'#ea7600')}${card('👷','จนท.รับงาน',r.staff,'#888b8d')}</tr>
+      </table>
+    </div>
+
+    <!-- detail -->
+    <div style="padding:8px 18px 4px">
+      <div style="background:${tint};border-radius:10px;padding:11px 13px">
+        <div style="font-size:11px;color:#6b8190;font-weight:600">⚠️ อาการที่แจ้ง</div>
+        <div style="font-size:14px;margin-top:3px;color:#13242f;line-height:1.45">${htmlesc(r.detail||'-')}</div>
+      </div>
+      ${note?`<div style="background:#eef7f1;border:1px dashed #16a34a;border-radius:10px;padding:11px 13px;margin-top:8px">
+        <div style="font-size:11px;color:#15803d;font-weight:600">🛠️ สรุปการแก้ไข / หมายเหตุ</div>
+        <div style="font-size:14px;margin-top:3px;color:#13242f;line-height:1.45">${htmlesc(note)}</div></div>`:''}
+    </div>
+
+    <!-- signatures -->
+    <table style="width:100%;border-collapse:collapse;margin-top:10px"><tr>
+      <td style="width:50%;text-align:center;padding:6px 18px">
+        <div style="border-top:1px solid #c9d3da;margin:26px 18px 5px"></div>
+        <div style="font-size:11px;color:#6b8190">ผู้แจ้ง / ผู้ตรวจสอบ</div></td>
+      <td style="width:50%;text-align:center;padding:6px 18px">
+        <div style="border-top:1px solid #c9d3da;margin:26px 18px 5px"></div>
+        <div style="font-size:11px;color:#6b8190">เจ้าหน้าที่ผู้รับผิดชอบ</div></td>
+    </tr></table>
+
+    <!-- footer -->
+    <div style="background:#2d2926;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <span style="font-size:11px;color:#7fe9d6;font-weight:600;letter-spacing:1px">CCTV OPS · Command Center</span>
+      <span style="font-size:10px;color:#9fb6bf;font-family:monospace">ออกรายงาน ${nowDate()} ${nowTime()}</span>
+    </div>
+  </div>`;
+}
+
+function renderPreview(){ $('reportCard').innerHTML = buildReportHTML(); }
+
+function renderReportThumbs(){
+  $('reportThumbs').innerHTML=reportImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}"/><span class="x" onclick="removeReportImage(${i})">✕</span></div>`).join('');
+  dzText.textContent = reportImages.length? `🖼️ ${reportImages.length}/${MAX_IMAGES} ภาพ (แตะเพื่อเพิ่ม)` : '🖼️ แตะเพิ่มภาพในรายงาน (สูงสุด 4 ภาพ)';
+  rcFile.value='';
+}
+function onReportFiles(fl){ addImages(fl, reportImages, ()=>{ renderPreview(); renderReportThumbs(); }); }
+function removeReportImage(i){ reportImages.splice(i,1); renderPreview(); renderReportThumbs(); }
+function syncNote(){ renderPreview(); }
+(function(){ const dz=$('dropzone'); ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
+  dz.addEventListener('drop',e=>{ if(e.dataTransfer.files.length) onReportFiles(e.dataTransfer.files); }); })();
+
+function reportFileName(ext){ const safe=(currentRec&&currentRec.point?currentRec.point:'report').replace(/[^\wก-๙]/g,'_'); return 'CCTV_report_'+safe+'_'+nowDate().replace(/\//g,'-')+'.'+ext; }
+
+/* โหนดส่งออก = HTML ใบรายงานชุดเดียวกับพรีวิว (กว้าง 560px) */
+function buildExportNode(){
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;left:-99999px;top:0;width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e9ee';
+  wrap.innerHTML=buildReportHTML();
+  return wrap;
+}
+function waitImages(node){
+  const imgs=[...node.querySelectorAll('img')];
+  return Promise.all(imgs.map(im=> im.complete ? Promise.resolve() : new Promise(res=>{ im.onload=im.onerror=res; setTimeout(res,8000); })));
+}
+async function renderReportCanvas(){
+  if(typeof html2canvas==='undefined') throw new Error('html2canvas ไม่พร้อม');
+  const node=buildExportNode(); document.body.appendChild(node);
+  await waitImages(node);
+  try{ return await html2canvas(node,{ backgroundColor:'#ffffff', scale:2, useCORS:true, logging:false }); }
+  finally{ if(node.parentNode) node.remove(); }
+}
+async function saveReportPNG(){
+  $('pngLabel').textContent='กำลังสร้าง...';
+  try{ const c=await renderReportCanvas(); const a=document.createElement('a'); a.download=reportFileName('png'); a.href=c.toDataURL('image/png'); document.body.appendChild(a); a.click(); a.remove(); toast('บันทึกรูปแล้ว ✓ ส่ง LINE ได้เลย'); }
+  catch(e){ console.error(e); toast('สร้างรูปไม่สำเร็จ',false); } finally{ $('pngLabel').textContent='🖼️ บันทึกรูป PNG (ส่ง LINE)'; }
+}
+async function saveReportPDF(){
+  $('pdfLabel').textContent='กำลังสร้าง...'; $('pdfSpin').classList.remove('hidden');
+  try{ if(!window.jspdf||!window.jspdf.jsPDF) throw new Error('jsPDF ไม่พร้อม');
+    const c=await renderReportCanvas(); const { jsPDF }=window.jspdf; const w=c.width,h=c.height;
+    const pdf=new jsPDF({ orientation:w>h?'l':'p', unit:'px', format:[w,h] });
+    pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,w,h); pdf.save(reportFileName('pdf')); toast('บันทึก PDF แล้ว ✓'); }
+  catch(e){ console.error(e); toast('สร้าง PDF ไม่สำเร็จ',false); } finally{ $('pdfLabel').textContent='📄 บันทึก PDF'; $('pdfSpin').classList.add('hidden'); }
+}
+
+/* ============================================================
+   EDIT / DELETE
+   ============================================================ */
+function editRecord(idx){ const rec=records[idx]; if(!rec){ toast('ไม่พบรายการ',false); return; } currentRec=rec; openEdit(); }
+function openEdit(){
+  const r=currentRec; if(!r) return;
+  if(!r.row){ toast('กรุณากด ↻ รีเฟรช ก่อนแก้ไข',false); return; }
+  if(rowsDirty){ toast('กำลังซิงค์ข้อมูล… กด ↻ รีเฟรช แล้วลองใหม่',false); return; }
+  e_date.value=r.date||''; e_time.value=r.time||''; e_point.value=r.point||'';
+  e_zone.value=r.zone||'ในศูนย์'; e_floor.value=r.floor||'1'; e_detail.value=r.detail||'';
+  e_sn.value=r.sn||''; e_staff.value=r.staff||''; e_status.value=r.status||'รอดำเนินการ'; e_note.value=r.note||'';
+  e_datepick.value=beToISO(r.date||''); e_timepick.value=(r.time||'').slice(0,8);
+  closeReport(); editModal.classList.remove('hidden');
+}
+function closeEdit(){ editModal.classList.add('hidden'); }
+$('editModal').addEventListener('click',e=>{ if(e.target.id==='editModal') closeEdit(); });
+document.getElementById('summaryModal').addEventListener('click',e=>{ if(e.target.id==='summaryModal') closeSummary(); });
+
+let editing=false, deleting=false;
+async function saveEdit(){
+  if(editing) return;
+  const r=currentRec; if(!r||!r.row){ toast('ไม่พบรายการ กรุณารีเฟรช',false); return; }
+  if(rowsDirty){ toast('กำลังซิงค์ข้อมูล… ลองใหม่อีกครั้ง',false); return; }
+  if(!e_point.value.trim()){ toast('กรุณากรอกจุดกล้อง',false); e_point.focus(); return; }
+  if(e_date.value.trim() && !validDateStr(e_date.value)){ toast('รูปแบบวันที่ไม่ถูกต้อง (วว/ดด/ปปปป)',false); e_date.focus(); return; }
+  if(e_time.value.trim() && !validTimeStr(e_time.value)){ toast('รูปแบบเวลาไม่ถูกต้อง (ชช:นน:วว)',false); e_time.focus(); return; }
+  const upd={ action:'update', row:r.row, date:e_date.value.trim(), time:e_time.value.trim(), point:e_point.value.trim(),
+    zone:e_zone.value, floor:e_floor.value, detail:e_detail.value.trim(), sn:e_sn.value.trim(),
+    staff:e_staff.value.trim(), status:e_status.value, note:e_note.value.trim() };
+  editing=true; $('eLabel').textContent='กำลังบันทึก...'; $('eSpin').classList.remove('hidden');
+  try{
+    await fetch(SCRIPT_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(upd) });
+    Object.assign(r, upd); delete r.action; r.status=normStatus(r.status);   // อัปเดตในหน่วยความจำ (normalize ให้ตรงกับการนับ)
+    rowsDirty=true; toast('บันทึกการแก้ไขแล้ว ✓'); closeEdit(); closeReport(); refreshUI(); setTimeout(loadData,1000);
+  }catch(e){ toast('แก้ไขไม่สำเร็จ ลองใหม่',false); }
+  finally{ editing=false; $('eLabel').textContent='💾 บันทึกการแก้ไข'; $('eSpin').classList.add('hidden'); }
+}
+
+async function deleteRecord(){
+  if(deleting) return;
+  const r=currentRec; if(!r) return;
+  if(!r.row){ toast('กรุณากด ↻ รีเฟรช ก่อนลบ',false); return; }
+  if(rowsDirty){ toast('กำลังซิงค์ข้อมูล… ลองใหม่อีกครั้ง',false); return; }
+  if(!confirm('ยืนยันลบรายการ "'+(r.point||'')+'" ?\nการลบไม่สามารถย้อนกลับได้')) return;
+  deleting=true;
+  try{
+    await fetch(SCRIPT_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'delete',row:r.row}) });
+    records=records.filter(x=>x!==r); rowsDirty=true; toast('ลบรายการแล้ว ✓'); closeEdit(); closeReport(); refreshUI(); setTimeout(loadData,1000);
+  }catch(e){ toast('ลบไม่สำเร็จ ลองใหม่',false); }
+  finally{ deleting=false; }
+}
+async function captureTable(){
+  toast('กำลังเตรียมภาพ...');
+  try{ const c=await html2canvas($('captureArea'),{ backgroundColor:getComputedStyle(document.body).backgroundColor, scale:2 });
+    const a=document.createElement('a'); a.download='CCTV_table_'+nowDate().replace(/\//g,'-')+'.png'; a.href=c.toDataURL('image/png'); a.click(); toast('บันทึกภาพตารางแล้ว ✓'); }
+  catch(e){ toast('จับภาพไม่สำเร็จ',false); }
+}
+
+window.addEventListener('unhandledrejection',e=>{ console.error('unhandled',e&&e.reason); });
+window.addEventListener('error',e=>{ console.error('error',e&&e.message); });
+try{ $('appLogo').innerHTML='<img src="'+logoDataURI()+'" style="width:100%;height:100%;object-fit:contain" alt="CCTV OPS"/>'; }catch(e){}
+setFormNow();
+loadData();
+</script>
+</body>
+</html>
