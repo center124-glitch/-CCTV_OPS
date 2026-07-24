@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>CCTV OPS — ระบบรับแจ้งซ่อมกล้องวงจรปิด</title>
 
+<!-- ============================================================
+     PWA / "เพิ่มไปหน้าจอโฮม" — ไอคอนถูกสร้างจากโลโก้แอปแบบ runtime
+     (วาด SVG โลโก้ลง canvas แปลงเป็น PNG) แล้วเติมใส่ลิงก์เหล่านี้ทีหลัง
+     ทำให้ไม่ต้องแนบไฟล์ภาพแยก ไฟล์ยังเป็น .html ไฟล์เดียวเหมือนเดิม
+     ============================================================ -->
+<link rel="icon" id="faviconLink" href="" />
+<link rel="apple-touch-icon" id="appleTouchIcon" href="" />
+<link rel="manifest" id="manifestLink" href="" />
+<meta name="theme-color" content="#00b2a9" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="CCTV OPS" />
+
 <script>
   // กรองเฉพาะคำเตือน "cdn.tailwindcss.com should not be used in production"
   // (เครื่องมือนี้เป็นไฟล์เดี่ยวใช้ภายใน การใช้ Play CDN ทำงานได้ปกติ)
@@ -47,7 +61,10 @@
     --k-wait:#ea7600; --k-prog:#f2a100; --k-done:#48a23f; --kshadow:none;
   }
   * { -webkit-tap-highlight-color: transparent; }
-  body { font-family:'Kanit',sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; transition:background .4s ease,color .4s ease; }
+  html { overflow-x:hidden; max-width:100%; }
+  html, body { width:100%; max-width:100%; overscroll-behavior-x:none; }
+  body { font-family:'Kanit',sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; position:relative; transition:background .4s ease,color .4s ease; }
+  img, canvas, svg, video { max-width:100%; }
   body.light { background:linear-gradient(180deg,#dcefe2 0%,#ecf6ef 18%,#f4faf6 48%,#fbfdfc 100%); background-attachment:fixed; }
   body.light.cyber-bg::before { opacity:.4; }
   body.dark { background:linear-gradient(180deg,#05070f 0%,#070b1640 40%,#05070f 100%),#05070f; background-attachment:fixed; }
@@ -98,6 +115,7 @@
   .spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
   @keyframes rowin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .row-in{animation:rowin .35s ease both}
+  .tbl-scroll{ overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
   .tbl-scroll::-webkit-scrollbar{height:8px;width:8px}.tbl-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 30%,transparent);border-radius:8px}
   #toast{transition:all .35s cubic-bezier(.2,.8,.2,1)}
   .modal-back{background:rgba(0,0,0,.65);backdrop-filter:blur(4px)}
@@ -120,6 +138,69 @@
 </head>
 
 <body class="dark cyber-bg min-h-screen">
+
+<!-- ============================================================
+     INTRO / SPLASH SCREEN
+     ทำไมต้องมี: ให้ผู้ใช้เห็นแบรนด์/โลโก้ทันทีระหว่างรอฟอนต์-ไลบรารีโหลด
+     (Chart.js, html2canvas, Google Font) แทนที่จะเห็นหน้าจอเปล่ากะพริบ
+     ============================================================ -->
+<div id="splashScreen" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#05070f 0%,#07131a 45%,#062b23 100%);transition:opacity .5s ease, visibility .5s ease;">
+  <div style="text-align:center">
+    <div id="splashLogo" style="width:88px;height:88px;margin:0 auto 18px;border-radius:24px;overflow:hidden;
+      box-shadow:0 0 40px rgba(0,178,169,.45);animation:splashPop .6s cubic-bezier(.34,1.56,.64,1) both"></div>
+    <div style="font-family:'Orbitron',sans-serif;font-weight:800;font-size:26px;letter-spacing:4px;
+      background:linear-gradient(100deg,#00b2a9,#48a23f,#84bd00);-webkit-background-clip:text;background-clip:text;color:transparent;
+      animation:splashFadeUp .6s ease .15s both">CCTV OPS</div>
+    <div style="font-family:'Kanit',sans-serif;font-size:12px;color:rgba(200,220,215,.65);letter-spacing:1px;margin-top:6px;
+      animation:splashFadeUp .6s ease .3s both">ระบบบันทึกและรับแจ้งซ่อมกล้องวงจรปิด</div>
+    <div style="width:120px;height:3px;background:rgba(255,255,255,.12);border-radius:99px;margin:22px auto 0;overflow:hidden">
+      <div style="width:100%;height:100%;background:linear-gradient(90deg,#00b2a9,#84bd00);border-radius:99px;
+        animation:splashBar 2.1s ease forwards"></div>
+    </div>
+  </div>
+</div>
+<style>
+  @keyframes splashPop{ from{ transform:scale(.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  @keyframes splashFadeUp{ from{ transform:translateY(8px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  @keyframes splashBar{ from{ width:0%; } to{ width:100%; } }
+</style>
+
+<!-- ============================================================
+     LOCK SCREEN (หน้าล็อก) — ทำไมต้องมี:
+     ผู้ใช้ขอให้ระบบไม่แสดงข้อมูล (สถานะงาน/ตำแหน่งกล้อง ฯลฯ) ค้างอยู่บนจอ
+     ตลอดเวลาเมื่อไม่มีคนใช้งาน (กันคนเดินผ่านเห็นข้อมูลภายใน) — จึงล็อกหน้าจอ
+     กลับมาที่นี่อัตโนมัติหลังไม่มีการแตะ/คลิก/สกอลล์ 60 วินาที ต้องแตะเพื่อปลดล็อก
+     ทุกครั้ง (ไม่ auto-dismiss เหมือนหน้า intro ตอนเปิดแอปครั้งแรก)
+     ============================================================ -->
+<div id="lockScreen" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;
+  cursor:pointer;background:linear-gradient(135deg,#05070f 0%,#07131a 45%,#062b23 100%);opacity:0;transition:opacity .4s ease;overflow:hidden;">
+  <!-- วงแสงลอยตัวตกแต่ง -->
+  <div style="position:absolute;width:340px;height:340px;border-radius:50%;top:-80px;left:-80px;
+    background:radial-gradient(circle,rgba(0,178,169,.25),transparent 70%);animation:lockFloat 7s ease-in-out infinite;"></div>
+  <div style="position:absolute;width:300px;height:300px;border-radius:50%;bottom:-90px;right:-60px;
+    background:radial-gradient(circle,rgba(132,189,0,.22),transparent 70%);animation:lockFloat 9s ease-in-out infinite reverse;"></div>
+  <div style="text-align:center;position:relative">
+    <div style="width:96px;height:96px;margin:0 auto 20px;border-radius:26px;overflow:hidden;position:relative;
+      box-shadow:0 0 0 0 rgba(0,178,169,.5);animation:lockPulseRing 2.2s ease-out infinite">
+      <div id="lockLogo" style="width:100%;height:100%"></div>
+    </div>
+    <div style="font-family:'Orbitron',sans-serif;font-weight:800;font-size:24px;letter-spacing:4px;
+      background:linear-gradient(100deg,#00b2a9,#48a23f,#84bd00);-webkit-background-clip:text;background-clip:text;color:transparent;">CCTV OPS</div>
+    <div style="font-family:'Kanit',sans-serif;font-size:12px;color:rgba(200,220,215,.55);letter-spacing:1px;margin-top:5px">
+      หน้าจอถูกล็อกเพื่อความเป็นส่วนตัวของข้อมูล
+    </div>
+    <div style="margin-top:30px;display:flex;align-items:center;justify-content:center;gap:8px;
+      font-family:'Kanit',sans-serif;font-size:13px;color:#7fe9d6;animation:lockTapHint 1.6s ease-in-out infinite">
+      <span style="font-size:18px">👆</span><span>แตะหน้าจอเพื่อเข้าใช้งาน</span>
+    </div>
+  </div>
+</div>
+<style>
+  @keyframes lockFloat{ 0%,100%{ transform:translateY(0) translateX(0); } 50%{ transform:translateY(20px) translateX(14px); } }
+  @keyframes lockPulseRing{ 0%{ box-shadow:0 0 0 0 rgba(0,178,169,.45); } 70%{ box-shadow:0 0 0 22px rgba(0,178,169,0); } 100%{ box-shadow:0 0 0 0 rgba(0,178,169,0); } }
+  @keyframes lockTapHint{ 0%,100%{ opacity:.55; transform:translateY(0); } 50%{ opacity:1; transform:translateY(-3px); } }
+</style>
 
 <header class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 pt-6 pb-2">
   <div class="flex items-center justify-between flex-wrap gap-3">
@@ -305,6 +386,12 @@
           <button onclick="saveReportPDF()" class="btn-ghost rounded-lg py-3 font-medium flex items-center justify-center gap-2"><span id="pdfLabel">📄 บันทึก PDF</span><svg id="pdfSpin" class="hidden spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-linecap="round"/></svg></button>
         </div>
         <p class="text-[11px] text-center" style="color:var(--muted)">บนมือถือ (iPhone) ถ้าไฟล์ไม่ดาวน์โหลด ให้กดค้างที่ภาพแล้วเลือก “บันทึก”</p>
+
+        <!-- ประวัติไฟล์ PDF ที่เคยบันทึกไว้กับรายการนี้ -->
+        <div class="pt-2 border-t" style="border-color:var(--soft-border)">
+          <p class="text-xs font-medium mb-2" style="color:var(--text)">📎 ไฟล์รายงานที่บันทึกไว้ก่อนหน้า</p>
+          <div id="savedReports" class="space-y-1.5"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -495,18 +582,22 @@ function normStatus(v){ const s=cleanStr(v); if(!s) return 'รอดำเน�
   return s;
 }
 function normalizeRow(r){
-  const base={row:null,date:'',time:'',point:'',zone:'',floor:'',detail:'',sn:'',staff:'',status:'รอดำเนินการ',note:'',image:''};
+  const base={row:null,date:'',time:'',point:'',zone:'',floor:'',detail:'',sn:'',staff:'',status:'รอดำเนินการ',note:'',image:'',reports:''};
   if(r==null) return base;
   if(Array.isArray(r)){
     return { row:null, date:t(r[0]), time:t(r[1]), point:t(r[2]), zone:cleanStr(r[3]),
         floor:cleanStr(r[4]), detail:t(r[5]), sn:t(r[6]), staff:t(r[7]),
-        status:normStatus(r[8]), note:t(r[9]), image:t(r[10]) };
+        status:normStatus(r[8]), note:t(r[9]), image:t(r[10]), reports:t(r[11]) };
   }
   return { row:(typeof r.row==='number'?r.row:null),
       date:t(r.date||r['ว-ด-ป']), time:t(r.time||r['เวลา']), point:t(r.point||r['จุดกล้อง']),
       zone:cleanStr(r.zone), floor:cleanStr(r.floor!=null&&r.floor!==''?r.floor:r['ชั้น']),
       detail:t(r.detail||r['รายละเอียด']), sn:t(r.sn), staff:t(r.staff),
-      status:normStatus(r.status||r['สถานะการซ่อม']), note:t(r.note||r['หมายเหตุ']), image:t(r.image) };
+      status:normStatus(r.status||r['สถานะการซ่อม']), note:t(r.note||r['หมายเหตุ']), image:t(r.image), reports:t(r.reports) };
+}
+/* แปลง reports string "fileId|dd/mm/yyyy HH:mm:ss,fileId2|..." → array ของ {id,date} */
+function parseReports(s){
+  return t(s).split(',').map(x=>x.trim()).filter(Boolean).map(x=>{ const [id,date]=x.split('|'); return {id:(id||'').trim(), date:(date||'').trim()}; }).filter(x=>x.id);
 }
 
 /* ============================================================
@@ -516,7 +607,7 @@ function onFormFiles(fl){ addImages(fl, formImages, renderFormThumbs); }
 function removeFormImage(i){ formImages.splice(i,1); renderFormThumbs(); }
 function clearFormImages(){ formImages=[]; renderFormThumbs(); }
 function renderFormThumbs(){
-  $('formThumbs').innerHTML=formImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}"/><span class="x" onclick="removeFormImage(${i})">✕</span></div>`).join('');
+  $('formThumbs').innerHTML=formImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}" alt="รูปแนบ"/><span class="x" onclick="removeFormImage(${i})">✕</span></div>`).join('');
   $('f_dzText').textContent = formImages.length? `✅ แนบแล้ว ${formImages.length}/${MAX_IMAGES} ภาพ (แตะเพื่อเพิ่ม)` : '📷 แตะถ่าย/เลือกรูป (เลือกหลายรูปได้) หรือ ลากไฟล์มาวาง';
   $('f_file').value='';
 }
@@ -838,6 +929,10 @@ async function renderSummaryPreview(){
   const box=$('summaryPreview');
   box.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)" class="font-thai">กำลังสร้างตัวอย่าง...</div>';
   try{
+    if(summaryRange==='custom'){
+      const {from,to}=rangeBounds();
+      if(from && to && from>to){ toast('ช่วงวันที่ไม่ถูกต้อง: "จากวันที่" ต้องมาก่อน "ถึงวันที่"',false); }
+    }
     const recs=getFilteredRecords();
     $('sumCount').textContent=recs.length+' รายการ';
     box.innerHTML=await buildSummaryHTML(recs);
@@ -880,6 +975,7 @@ function renderTable(){
     return mq && (!fs||r.status===fs); });
   tbody.innerHTML=rows.map(({r,idx},i)=>{
     const n=r.image?r.image.split(',').filter(Boolean).length:0;
+    const nr=parseReports(r.reports).length;
     return `<tr onclick="openReport(${idx})" class="row-in border-b cursor-pointer hover:bg-emerald-400/5" style="border-color:var(--soft-border);animation-delay:${i*0.03}s" title="แตะเพื่อออกใบรายงาน">
       <td class="py-2 pr-2 font-mono" style="color:var(--muted)">${esc(r.date)}</td>
       <td class="py-2 pr-2 font-mono" style="color:var(--muted)">${esc(r.time)}</td>
@@ -888,9 +984,17 @@ function renderTable(){
       <td class="py-2 pr-2 max-w-[140px] truncate" style="color:var(--muted)" title="${esc(r.detail)}">${esc(r.detail)}</td>
       <td class="py-2 pr-2" style="color:var(--muted)">${esc(r.staff)||'-'}</td>
       <td class="py-2 pr-2">${statusSelect(r)}</td>
-      <td class="py-2 pr-2 text-center whitespace-nowrap"><button onclick="event.stopPropagation();openReport(${idx})" class="btn-neon rounded-md px-2 py-1.5 text-[11px]">📄</button> <button onclick="event.stopPropagation();editRecord(${idx})" class="btn-ghost rounded-md px-2 py-1.5 text-[11px]">✏️</button></td>
+      <td class="py-2 pr-2 text-center whitespace-nowrap"><button onclick="event.stopPropagation();openReport(${idx})" class="btn-neon rounded-md px-2 py-1.5 text-[11px]">📄</button> <button onclick="event.stopPropagation();editRecord(${idx})" class="btn-ghost rounded-md px-2 py-1.5 text-[11px]">✏️</button>${nr?` <button onclick="event.stopPropagation();openLatestPDF(${idx})" class="btn-ghost rounded-md px-2 py-1.5 text-[11px]" title="เปิดไฟล์ PDF ล่าสุดที่บันทึกไว้ (${nr} ไฟล์)" style="border-color:var(--accent);color:var(--accent)">🗂️${nr}</button>`:''}</td>
     </tr>`; }).join('');
   emptyState.classList.toggle('hidden',rows.length>0);
+}
+/* เปิดไฟล์ PDF ที่บันทึกล่าสุดของรายการนี้ในแท็บใหม่ (ไฟล์เก็บบน Google Drive) */
+function openLatestPDF(idx){
+  const r=records[idx]; if(!r) return;
+  const list=parseReports(r.reports);
+  if(!list.length){ toast('รายการนี้ยังไม่มีไฟล์ PDF ที่บันทึกไว้',false); return; }
+  const last=list[list.length-1];
+  window.open('https://drive.google.com/file/d/'+encodeURIComponent(last.id)+'/view','_blank','noopener');
 }
 async function updateStatus(row, status){
   if(!row){ toast('กรุณากด ↻ รีเฟรช ก่อนแก้สถานะ',false); renderTable(); return; }
@@ -913,7 +1017,7 @@ function openReport(idx){
   if(!rec){ toast('ไม่พบรายการนี้ กรุณารีเฟรช',false); return; }
   currentRec=rec; reportImages=[]; const token=++reportToken;
   rcNoteInput.value=currentRec.note||'';
-  renderPreview(); renderReportThumbs();
+  renderPreview(); renderReportThumbs(); renderSavedReports();
   reportModal.classList.remove('hidden');
   if(currentRec.image){ const ids=String(currentRec.image).split(',').map(s=>s.trim()).filter(Boolean);
     if(ids.length) dzText.textContent='⏳ กำลังโหลดรูปจากระบบ...';
@@ -921,6 +1025,19 @@ function openReport(idx){
 }
 function closeReport(){ reportModal.classList.add('hidden'); }
 $('reportModal').addEventListener('click',e=>{ if(e.target.id==='reportModal') closeReport(); });
+
+/* รายการ PDF ที่เคยบันทึกไว้กับรายการนี้ — เปิดดู/โหลดย้อนหลังได้ทันที (ไฟล์อยู่บน Google Drive) */
+function renderSavedReports(){
+  const box=$('savedReports'); if(!box) return;
+  const list=parseReports(currentRec&&currentRec.reports).slice().reverse();   // ใหม่สุดอยู่บน
+  if(!list.length){ box.innerHTML='<p class="text-[11px]" style="color:var(--muted)">ยังไม่เคยบันทึก PDF ของรายการนี้</p>'; return; }
+  box.innerHTML=list.map(x=>`
+    <a href="https://drive.google.com/file/d/${encodeURIComponent(x.id)}/view" target="_blank" rel="noopener"
+       class="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-thai" style="background:var(--field-bg);border:1px solid var(--soft-border);color:var(--text);text-decoration:none">
+      <span>📄 ${x.date?htmlesc(x.date):'ไม่ทราบวันที่'}</span>
+      <span style="color:var(--accent)">เปิดดู ↗</span>
+    </a>`).join('');
+}
 
 function fetchStoredImage(id, token){
   const cb='img_'+Math.random().toString(36).slice(2);
@@ -961,11 +1078,11 @@ function buildReportHTML(){
   // แกลเลอรีภาพ
   const imgs=reportImages, n=imgs.length; let gallery='';
   if(n===1){
-    gallery=`<img src="${imgs[0]}" style="width:100%;height:280px;object-fit:cover;display:block"/>`;
+    gallery=`<img src="${imgs[0]}" alt="ภาพหน้างาน" style="width:100%;height:280px;object-fit:cover;display:block"/>`;
   } else if(n){
     const h=n===2?'180px':'150px';
     gallery=`<div style="font-size:0;background:#0b1220">`+imgs.map(d=>
-      `<div style="display:inline-block;width:50%;box-sizing:border-box;padding:2px;vertical-align:top"><img src="${d}" style="width:100%;height:${h};object-fit:cover;display:block;border-radius:6px"/></div>`).join('')+`</div>`;
+      `<div style="display:inline-block;width:50%;box-sizing:border-box;padding:2px;vertical-align:top"><img src="${d}" alt="ภาพหน้างาน" style="width:100%;height:${h};object-fit:cover;display:block;border-radius:6px"/></div>`).join('')+`</div>`;
   }
 
   // การ์ดข้อมูล (table 2 คอลัมน์ ให้เรียงตรงกันเป๊ะ)
@@ -1000,9 +1117,6 @@ function buildReportHTML(){
       </div>
     </div>
 
-    <!-- gallery -->
-    ${gallery}
-
     <!-- progress -->
     <div style="padding:14px 18px 6px">
       <div style="font-size:10.5px;color:#74899a;margin-bottom:6px">ความคืบหน้าการซ่อม</div>
@@ -1033,6 +1147,9 @@ function buildReportHTML(){
         <div style="font-size:14px;margin-top:3px;color:#13242f;line-height:1.45">${htmlesc(note)}</div></div>`:''}
     </div>
 
+    <!-- photos (ย้ายมาไว้หลังรายละเอียด ให้อ่านข้อมูลก่อนแล้วค่อยดูภาพประกอบ) -->
+    ${gallery?`${secHead('📷 ภาพประกอบหน้างาน')}<div style="padding:0 14px 4px"><div style="border-radius:10px;overflow:hidden">${gallery}</div></div>`:''}
+
     <!-- signatures -->
     <table style="width:100%;border-collapse:collapse;margin-top:10px"><tr>
       <td style="width:50%;text-align:center;padding:6px 18px">
@@ -1054,7 +1171,7 @@ function buildReportHTML(){
 function renderPreview(){ $('reportCard').innerHTML = buildReportHTML(); }
 
 function renderReportThumbs(){
-  $('reportThumbs').innerHTML=reportImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}"/><span class="x" onclick="removeReportImage(${i})">✕</span></div>`).join('');
+  $('reportThumbs').innerHTML=reportImages.map((d,i)=>`<div class="thumb" style="aspect-ratio:1"><img src="${d}" alt="รูปแนบ"/><span class="x" onclick="removeReportImage(${i})">✕</span></div>`).join('');
   dzText.textContent = reportImages.length? `🖼️ ${reportImages.length}/${MAX_IMAGES} ภาพ (แตะเพื่อเพิ่ม)` : '🖼️ แตะเพิ่มภาพในรายงาน (สูงสุด 4 ภาพ)';
   rcFile.value='';
 }
@@ -1095,8 +1212,23 @@ async function saveReportPDF(){
   try{ if(!window.jspdf||!window.jspdf.jsPDF) throw new Error('jsPDF ไม่พร้อม');
     const c=await renderReportCanvas(); const { jsPDF }=window.jspdf; const w=c.width,h=c.height;
     const pdf=new jsPDF({ orientation:w>h?'l':'p', unit:'px', format:[w,h] });
-    pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,w,h); pdf.save(reportFileName('pdf')); toast('บันทึก PDF แล้ว ✓'); }
+    pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,w,h); pdf.save(reportFileName('pdf')); toast('บันทึก PDF แล้ว ✓');
+    attachReportToRecord(pdf);   // เก็บสำเนาไว้ในระบบ ต่อท้ายรายการนี้ เพื่อดู/โหลดย้อนหลังได้
+  }
   catch(e){ console.error(e); toast('สร้าง PDF ไม่สำเร็จ',false); } finally{ $('pdfLabel').textContent='📄 บันทึก PDF'; $('pdfSpin').classList.add('hidden'); }
+}
+
+/* ---------- แนบสำเนา PDF ที่เพิ่งบันทึกไว้กับรายการนี้ (ไม่บล็อกการดาวน์โหลดหลัก) ----------
+   ทำไม: ให้กลับมาเปิดดู/โหลดรายงานที่เคยออกไว้ก่อนหน้าได้จากในระบบ โดยไม่ต้องหาไฟล์เก่าในเครื่อง */
+async function attachReportToRecord(pdf){
+  try{
+    const r=currentRec; if(!r||!r.row) return;   // รายการยังไม่มีเลขแถว (ยังไม่รีเฟรช) ข้ามการแนบแบบเงียบๆ
+    let uri=pdf.output('datauristring');
+    uri=uri.replace(/;filename=[^;]*;base64,/, ';base64,');   // jsPDF ใส่ ;filename=...; แทรกกลางทำให้ regex ฝั่ง backend ไม่ match ต้องตัดออก
+    if(!/^data:application\/pdf;base64,/.test(uri)) return;
+    await fetch(SCRIPT_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'attachReport', row:r.row, pdf:uri}) });
+    setTimeout(loadData, 1500);   // no-cors อ่านผลจริงไม่ได้ รีโหลดเพื่อดึงรายการไฟล์ที่แนบสำเร็จมาแสดง
+  }catch(e){ console.error('attachReport',e); }   // ฟีเจอร์เสริม พังแล้วไม่กระทบการดาวน์โหลด PDF หลัก
 }
 
 /* ============================================================
@@ -1159,7 +1291,96 @@ async function captureTable(){
 
 window.addEventListener('unhandledrejection',e=>{ console.error('unhandled',e&&e.reason); });
 window.addEventListener('error',e=>{ console.error('error',e&&e.message); });
+window.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(!reportModal.classList.contains('hidden')) closeReport();
+  else if(!editModal.classList.contains('hidden')) closeEdit();
+  else if(!summaryModal.classList.contains('hidden')) closeSummary();
+});
 try{ $('appLogo').innerHTML='<img src="'+logoDataURI()+'" style="width:100%;height:100%;object-fit:contain" alt="CCTV OPS"/>'; }catch(e){}
+
+/* ---------- ปิด Intro หลังแสดงครบเวลาขั้นต่ำ ----------
+   ทำไม: ใช้ setTimeout ตายตัว (ไม่ผูกกับ loadData) เพราะถ้าเน็ตช้า/พัง
+   หน้า intro ต้องไม่ค้างถาวร — ผู้ใช้ต้องเห็นแดชบอร์ด (แม้ข้อมูลยังโหลดไม่เสร็จ)
+   ภายในเวลาที่คาดเดาได้เสมอ (2.3 วินาที) */
+function hideSplash(){
+  const el=$('splashScreen'); if(!el) return;
+  el.style.pointerEvents='none';   // หยุดบังการกดทันที ไม่ต้องรอ fade จบ
+  el.style.opacity='0'; el.style.visibility='hidden';
+  setTimeout(()=>{ if(el.parentNode) el.remove(); }, 550);
+  resetIdleTimer();   // เริ่มจับเวลาไม่มีการใช้งานหลังเข้าแอปแล้ว
+}
+try{ $('splashLogo').innerHTML='<img src="'+logoDataURI()+'" style="width:100%;height:100%;object-fit:contain" alt="CCTV OPS"/>'; }catch(e){}
+setTimeout(hideSplash, 2300);
+
+/* ============================================================
+   ไอคอนแอป (Add to Home Screen) — วาดโลโก้ SVG ลง canvas แล้ว
+   แปลงเป็น PNG data URL ใส่ favicon / apple-touch-icon / manifest
+   ทำ runtime เพราะไฟล์นี้เป็น .html ไฟล์เดียว ไม่มีไฟล์ภาพแยก
+   ============================================================ */
+function svgToPngDataURL(size){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const c=document.createElement('canvas'); c.width=size; c.height=size;
+        const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,size,size);
+        resolve(c.toDataURL('image/png'));
+      }catch(err){ reject(err); }
+    };
+    img.onerror=()=>reject(new Error('logo image failed'));
+    img.src=logoDataURI();
+  });
+}
+async function setupAppIcon(){
+  try{
+    const icon=await svgToPngDataURL(512);
+    $('faviconLink').setAttribute('href', icon);
+    $('appleTouchIcon').setAttribute('href', icon);
+    const manifest={ name:'CCTV OPS', short_name:'CCTV OPS', description:'ระบบบันทึกและรับแจ้งซ่อมกล้องวงจรปิด',
+      start_url:'.', display:'standalone', orientation:'portrait', background_color:'#05070f', theme_color:'#00b2a9',
+      icons:[{src:icon,sizes:'512x512',type:'image/png'},{src:icon,sizes:'192x192',type:'image/png'}] };
+    const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+    $('manifestLink').setAttribute('href', URL.createObjectURL(blob));
+  }catch(err){ console.error('app icon setup',err); }   // ไม่ใช่ฟีเจอร์หลัก พังแล้วไม่กระทบการใช้งาน
+}
+setupAppIcon();
+
+/* ============================================================
+   หน้าล็อกอัตโนมัติ (Idle Lock) — กลับมาหน้าล็อกหลังไม่มีการใช้งาน 60 วิ
+   หยุดจับเวลาไว้ชั่วคราวขณะมี modal เปิดอยู่ (ผู้ใช้อาจกำลังอ่านรายงานอยู่)
+   ============================================================ */
+const IDLE_LOCK_MS=60000;
+let idleTimer=null, splashDone=false;
+function anyModalOpen(){
+  return !reportModal.classList.contains('hidden') || !editModal.classList.contains('hidden') || !summaryModal.classList.contains('hidden');
+}
+function resetIdleTimer(){
+  splashDone=true;
+  clearTimeout(idleTimer);
+  idleTimer=setTimeout(triggerLock, IDLE_LOCK_MS);
+}
+function isLocked(){ return $('lockScreen').style.display!=='none'; }
+function triggerLock(){
+  if(!splashDone) return;
+  if(anyModalOpen()){ resetIdleTimer(); return; }   // กำลังใช้งานอยู่ เลื่อนเวลาล็อกออกไป
+  const el=$('lockScreen'); if(!el || isLocked()) return;
+  el.style.display='flex';
+  requestAnimationFrame(()=>{ el.style.opacity='1'; });
+}
+function unlockScreen(){
+  const el=$('lockScreen'); if(!isLocked()) return;
+  el.style.opacity='0';
+  setTimeout(()=>{ el.style.display='none'; }, 400);
+  resetIdleTimer();
+}
+try{ $('lockLogo').innerHTML='<img src="'+logoDataURI()+'" style="width:100%;height:100%;object-fit:contain" alt="CCTV OPS"/>'; }catch(e){}
+$('lockScreen').addEventListener('click', unlockScreen);
+$('lockScreen').addEventListener('touchstart', unlockScreen, {passive:true});
+['click','touchstart','keydown','scroll','wheel'].forEach(evt=>{
+  document.addEventListener(evt, ()=>{ if(!isLocked()) resetIdleTimer(); }, {passive:true});
+});
+
 setFormNow();
 loadData();
 </script>
