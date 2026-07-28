@@ -164,6 +164,10 @@
   @keyframes splashPop{ from{ transform:scale(.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
   @keyframes splashFadeUp{ from{ transform:translateY(8px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
   @keyframes splashBar{ from{ width:0%; } to{ width:100%; } }
+  /* จอ Laptop/PC (กว้าง ≥ 1024px): ขยายโลโก้ intro ใหญ่ขึ้น ~20% (88px → 106px) — มือถือคงเดิม */
+  @media (min-width:1024px){
+    #splashLogo{ width:106px !important; height:106px !important; border-radius:29px !important; }
+  }
 </style>
 
 <!-- ============================================================
@@ -174,32 +178,59 @@
      ทุกครั้ง (ไม่ auto-dismiss เหมือนหน้า intro ตอนเปิดแอปครั้งแรก)
      ============================================================ -->
 <div id="lockScreen" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;
-  cursor:pointer;background:linear-gradient(135deg,#05070f 0%,#07131a 45%,#062b23 100%);opacity:0;transition:opacity .4s ease;overflow:hidden;">
+  cursor:pointer;background:radial-gradient(120% 120% at 50% 0%,#0a2b28 0%,#07131a 45%,#05070f 100%);opacity:0;transition:opacity .45s ease;overflow:hidden;">
   <!-- วงแสงลอยตัวตกแต่ง -->
-  <div style="position:absolute;width:340px;height:340px;border-radius:50%;top:-80px;left:-80px;
-    background:radial-gradient(circle,rgba(0,178,169,.25),transparent 70%);animation:lockFloat 7s ease-in-out infinite;"></div>
-  <div style="position:absolute;width:300px;height:300px;border-radius:50%;bottom:-90px;right:-60px;
-    background:radial-gradient(circle,rgba(132,189,0,.22),transparent 70%);animation:lockFloat 9s ease-in-out infinite reverse;"></div>
+  <div style="position:absolute;width:420px;height:420px;border-radius:50%;top:-120px;left:-120px;
+    background:radial-gradient(circle,rgba(0,178,169,.28),transparent 70%);animation:lockFloat 7s ease-in-out infinite;"></div>
+  <div style="position:absolute;width:360px;height:360px;border-radius:50%;bottom:-120px;right:-90px;
+    background:radial-gradient(circle,rgba(132,189,0,.24),transparent 70%);animation:lockFloat 9s ease-in-out infinite reverse;"></div>
+  <div style="position:absolute;width:240px;height:240px;border-radius:50%;top:40%;right:12%;
+    background:radial-gradient(circle,rgba(72,162,63,.18),transparent 70%);animation:lockFloat 11s ease-in-out infinite;"></div>
+
   <div style="text-align:center;position:relative">
-    <div style="width:96px;height:96px;margin:0 auto 20px;border-radius:26px;overflow:hidden;position:relative;
-      box-shadow:0 0 0 0 rgba(0,178,169,.5);animation:lockPulseRing 2.2s ease-out infinite">
-      <div id="lockLogo" style="width:100%;height:100%"></div>
+    <!-- โลโก้ + วงโคจร -->
+    <div id="lockLogoWrap" style="position:relative;width:150px;height:150px;margin:0 auto 26px;display:flex;align-items:center;justify-content:center">
+      <div style="position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(0,178,169,.35);border-top-color:transparent;border-bottom-color:transparent;animation:lockOrbit 6s linear infinite"></div>
+      <div style="position:absolute;inset:14px;border-radius:50%;border:1.5px solid rgba(132,189,0,.3);border-left-color:transparent;border-right-color:transparent;animation:lockOrbit 4.5s linear infinite reverse"></div>
+      <div style="width:100px;height:100px;border-radius:28px;overflow:hidden;position:relative;
+        box-shadow:0 0 0 0 rgba(0,178,169,.5), 0 12px 40px rgba(0,178,169,.35);animation:lockPulseRing 2.4s ease-out infinite">
+        <div id="lockLogo" style="width:100%;height:100%"></div>
+      </div>
     </div>
-    <div style="font-family:'Orbitron',sans-serif;font-weight:800;font-size:24px;letter-spacing:4px;
-      background:linear-gradient(100deg,#00b2a9,#48a23f,#84bd00);-webkit-background-clip:text;background-clip:text;color:transparent;">CCTV OPS</div>
-    <div style="font-family:'Kanit',sans-serif;font-size:12px;color:rgba(200,220,215,.55);letter-spacing:1px;margin-top:5px">
-      หน้าจอถูกล็อกเพื่อความเป็นส่วนตัวของข้อมูล
+
+    <div style="font-family:'Orbitron',sans-serif;font-weight:800;font-size:26px;letter-spacing:5px;
+      background:linear-gradient(100deg,#00b2a9,#48a23f,#84bd00,#00b2a9);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+      animation:lockShimmer 3.5s linear infinite">CCTV OPS</div>
+    <div style="font-family:'Kanit',sans-serif;font-size:12.5px;color:rgba(200,220,215,.6);letter-spacing:1px;margin-top:6px">
+      ระบบบันทึกและรับแจ้งซ่อมกล้องวงจรปิด
     </div>
-    <div style="margin-top:30px;display:flex;align-items:center;justify-content:center;gap:8px;
-      font-family:'Kanit',sans-serif;font-size:13px;color:#7fe9d6;animation:lockTapHint 1.6s ease-in-out infinite">
-      <span style="font-size:18px">👆</span><span>แตะหน้าจอเพื่อเข้าใช้งาน</span>
+
+    <!-- นาฬิกาสด -->
+    <div id="lockClock" style="font-family:'Share Tech Mono','Kanit',monospace;font-size:15px;color:#7fe9d6;letter-spacing:2px;margin-top:16px;opacity:.85"></div>
+
+    <!-- ปุ่มแตะปลดล็อก -->
+    <div style="margin-top:26px;display:inline-flex;align-items:center;gap:9px;
+      font-family:'Kanit',sans-serif;font-size:13px;color:#03262b;font-weight:600;
+      padding:11px 22px;border-radius:999px;background:linear-gradient(100deg,#00b2a9,#84bd00);
+      box-shadow:0 8px 24px rgba(0,178,169,.4);animation:lockTapHint 1.8s ease-in-out infinite">
+      <span style="font-size:17px">👆</span><span>แตะหน้าจอเพื่อเข้าใช้งาน</span>
+    </div>
+    <div style="font-family:'Kanit',sans-serif;font-size:10.5px;color:rgba(200,220,215,.4);letter-spacing:.5px;margin-top:16px">
+      🔒 หน้าจอถูกล็อกอัตโนมัติเพื่อความเป็นส่วนตัวของข้อมูล
     </div>
   </div>
 </div>
 <style>
-  @keyframes lockFloat{ 0%,100%{ transform:translateY(0) translateX(0); } 50%{ transform:translateY(20px) translateX(14px); } }
-  @keyframes lockPulseRing{ 0%{ box-shadow:0 0 0 0 rgba(0,178,169,.45); } 70%{ box-shadow:0 0 0 22px rgba(0,178,169,0); } 100%{ box-shadow:0 0 0 0 rgba(0,178,169,0); } }
-  @keyframes lockTapHint{ 0%,100%{ opacity:.55; transform:translateY(0); } 50%{ opacity:1; transform:translateY(-3px); } }
+  @keyframes lockFloat{ 0%,100%{ transform:translateY(0) translateX(0); } 50%{ transform:translateY(22px) translateX(16px); } }
+  @keyframes lockPulseRing{ 0%{ box-shadow:0 0 0 0 rgba(0,178,169,.5), 0 12px 40px rgba(0,178,169,.35); } 70%{ box-shadow:0 0 0 26px rgba(0,178,169,0), 0 12px 40px rgba(0,178,169,.35); } 100%{ box-shadow:0 0 0 0 rgba(0,178,169,0), 0 12px 40px rgba(0,178,169,.35); } }
+  @keyframes lockOrbit{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  @keyframes lockShimmer{ from{ background-position:0% center; } to{ background-position:200% center; } }
+  @keyframes lockTapHint{ 0%,100%{ transform:translateY(0); box-shadow:0 8px 24px rgba(0,178,169,.4); } 50%{ transform:translateY(-4px); box-shadow:0 14px 32px rgba(0,178,169,.55); } }
+  /* จอ Laptop/PC: ขยายโลโก้หน้าล็อกให้ใหญ่ขึ้น */
+  @media (min-width:1024px){
+    #lockLogoWrap{ width:180px !important; height:180px !important; }
+    #lockLogoWrap > div:last-child{ width:120px !important; height:120px !important; border-radius:34px !important; }
+  }
 </style>
 
 <header class="mx-auto w-full max-w-[1620px] px-4 sm:px-6 lg:px-10 xl:px-14 pt-6 pb-2">
@@ -1350,7 +1381,7 @@ setupAppIcon();
    หน้าล็อกอัตโนมัติ (Idle Lock) — กลับมาหน้าล็อกหลังไม่มีการใช้งาน 60 วิ
    หยุดจับเวลาไว้ชั่วคราวขณะมี modal เปิดอยู่ (ผู้ใช้อาจกำลังอ่านรายงานอยู่)
    ============================================================ */
-const IDLE_LOCK_MS=60000;
+const IDLE_LOCK_MS=180000;   // 3 นาที — ไม่มีการแตะ/คลิก/สกอลล์ครบเวลานี้ จะกลับไปหน้าล็อก
 let idleTimer=null, splashDone=false;
 function anyModalOpen(){
   return !reportModal.classList.contains('hidden') || !editModal.classList.contains('hidden') || !summaryModal.classList.contains('hidden');
@@ -1361,17 +1392,25 @@ function resetIdleTimer(){
   idleTimer=setTimeout(triggerLock, IDLE_LOCK_MS);
 }
 function isLocked(){ return $('lockScreen').style.display!=='none'; }
+let lockClockTimer=null;
+function updateLockClock(){
+  const d=new Date();
+  const dateStr=pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+(d.getFullYear()+543);
+  $('lockClock').textContent=dateStr+'  '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
 function triggerLock(){
   if(!splashDone) return;
   if(anyModalOpen()){ resetIdleTimer(); return; }   // กำลังใช้งานอยู่ เลื่อนเวลาล็อกออกไป
   const el=$('lockScreen'); if(!el || isLocked()) return;
   el.style.display='flex';
   requestAnimationFrame(()=>{ el.style.opacity='1'; });
+  updateLockClock(); clearInterval(lockClockTimer); lockClockTimer=setInterval(updateLockClock,1000);
 }
 function unlockScreen(){
   const el=$('lockScreen'); if(!isLocked()) return;
   el.style.opacity='0';
   setTimeout(()=>{ el.style.display='none'; }, 400);
+  clearInterval(lockClockTimer); lockClockTimer=null;   // หยุดนาฬิกาเมื่อปลดล็อก (ประหยัดทรัพยากร)
   resetIdleTimer();
 }
 try{ $('lockLogo').innerHTML='<img src="'+logoDataURI()+'" style="width:100%;height:100%;object-fit:contain" alt="CCTV OPS"/>'; }catch(e){}
