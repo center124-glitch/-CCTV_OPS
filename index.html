@@ -80,6 +80,23 @@
   @keyframes gridmove{from{background-position:0 0}to{background-position:44px 44px}}
   @keyframes drift{from{transform:translate(0,0) rotate(0deg)}to{transform:translate(3%,-3%) rotate(2deg)}}
 
+  /* ---- เอฟเฟกต์พื้นหลังเคลื่อนไหว (blob เรืองแสง + เส้นสแกน) ---- */
+  #bgfx{ position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+  #bgfx .blob{ position:absolute; border-radius:50%; filter:blur(50px); opacity:.5; will-change:transform; }
+  body.light #bgfx .blob{ opacity:.28; }
+  #bgfx .b1{ width:42vw; height:42vw; left:-8vw; top:-6vw; background:radial-gradient(circle,var(--accent),transparent 68%); animation:float1 19s ease-in-out infinite; }
+  #bgfx .b2{ width:38vw; height:38vw; right:-10vw; top:12vh; background:radial-gradient(circle,var(--accent2),transparent 68%); animation:float2 23s ease-in-out infinite; }
+  #bgfx .b3{ width:34vw; height:34vw; left:28vw; bottom:-12vw; background:radial-gradient(circle,var(--accent),transparent 68%); animation:float3 27s ease-in-out infinite; }
+  @keyframes float1{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(6vw,5vh) scale(1.12); } }
+  @keyframes float2{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(-5vw,6vh) scale(1.15); } }
+  @keyframes float3{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(4vw,-6vh) scale(1.1); } }
+  #bgfx .scan{ position:absolute; left:0; right:0; height:140px; opacity:.5;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--accent) 16%,transparent),transparent);
+    animation:scanmove 7.5s linear infinite; }
+  body.light #bgfx .scan{ opacity:.25; }
+  @keyframes scanmove{ 0%{ transform:translateY(-160px); } 100%{ transform:translateY(100vh); } }
+  @media (prefers-reduced-motion: reduce){ #bgfx .blob,#bgfx .scan,.cyber-bg::before,.cyber-bg::after{ animation:none !important; } }
+
   .glass{background:var(--glass-bg);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);
     border:1px solid var(--glass-border);box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)}
   .accent{color:var(--accent);text-shadow:var(--th)} .accent2{color:var(--accent2);text-shadow:var(--th2)}
@@ -139,6 +156,9 @@
 
 <body class="dark cyber-bg min-h-screen">
 
+<!-- ชั้นเอฟเฟกต์พื้นหลังเคลื่อนไหว (อยู่หลังเนื้อหา z-index -1) -->
+<div id="bgfx" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="scan"></div></div>
+
 <!-- ============================================================
      INTRO / SPLASH SCREEN
      ทำไมต้องมี: ให้ผู้ใช้เห็นแบรนด์/โลโก้ทันทีระหว่างรอฟอนต์-ไลบรารีโหลด
@@ -147,8 +167,14 @@
 <div id="splashScreen" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
   background:linear-gradient(135deg,#05070f 0%,#07131a 45%,#062b23 100%);transition:opacity .5s ease, visibility .5s ease;">
   <div style="text-align:center">
-    <div id="splashLogo" style="width:88px;height:88px;margin:0 auto 18px;border-radius:24px;overflow:hidden;
-      box-shadow:0 0 40px rgba(0,178,169,.45);animation:splashPop .6s cubic-bezier(.34,1.56,.64,1) both"></div>
+    <!-- โลโก้ + เรดาร์กวาด + วงโคจร -->
+    <div id="splashLogoWrap" style="position:relative;width:150px;height:150px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center">
+      <div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg, transparent 0deg, rgba(0,178,169,.45) 40deg, transparent 90deg);animation:radarSweep 2.6s linear infinite"></div>
+      <div style="position:absolute;inset:8px;border-radius:50%;border:1px solid rgba(0,178,169,.25)"></div>
+      <div style="position:absolute;inset:26px;border-radius:50%;border:1px solid rgba(132,189,0,.22)"></div>
+      <div id="splashLogo" style="width:88px;height:88px;border-radius:24px;overflow:hidden;position:relative;
+        box-shadow:0 0 40px rgba(0,178,169,.5);animation:splashPop .6s cubic-bezier(.34,1.56,.64,1) both"></div>
+    </div>
     <div style="font-family:'Orbitron',sans-serif;font-weight:800;font-size:26px;letter-spacing:4px;
       background:linear-gradient(100deg,#00b2a9,#48a23f,#84bd00);-webkit-background-clip:text;background-clip:text;color:transparent;
       animation:splashFadeUp .6s ease .15s both">CCTV OPS</div>
@@ -166,8 +192,10 @@
   @keyframes splashPop{ from{ transform:scale(.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
   @keyframes splashFadeUp{ from{ transform:translateY(8px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
   @keyframes splashBar{ from{ width:0%; } to{ width:100%; } }
-  /* จอ Laptop/PC (กว้าง ≥ 1024px): ขยายโลโก้ intro ใหญ่ขึ้น ~20% (88px → 106px) — มือถือคงเดิม */
+  @keyframes radarSweep{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  /* จอ Laptop/PC (กว้าง ≥ 1024px): ขยายโลโก้ intro ใหญ่ขึ้น ~20% — มือถือคงเดิม */
   @media (min-width:1024px){
+    #splashLogoWrap{ width:180px !important; height:180px !important; }
     #splashLogo{ width:106px !important; height:106px !important; border-radius:29px !important; }
   }
 </style>
